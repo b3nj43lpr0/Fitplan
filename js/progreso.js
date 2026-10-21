@@ -187,6 +187,83 @@ async function paintPhotos() {
     paintPhotos();
   }));
 }
+// ---------- Déficit ----------
+function deficitChart(days) {
+  const vals = days.map(x => x.v);
+  const max = Math.max(500, ...vals.filter(v => v !== null).map(v => Math.abs(v)));
+  return `<div class="def-chart">${days.map(x => {
+    const v = x.v, h = v === null ? 0 : Math.abs(v) / max * 50;
+    return `<div class="dc" title="${shortDate(x.k)}: ${v === null ? 'sin registro' : (v >= 0 ? 'déficit ' : 'superávit ') + fmtKcal(v) + ' kcal'}">
+      <div class="dc-up">${v !== null && v >= 0 ? `<i class="pos" style="height:${h * 2}%"></i>` : ''}</div>
+      <div class="dc-down">${v !== null && v < 0 ? `<i class="neg" style="height:${h * 2}%"></i>` : ''}</div>
+      <span>${parseKey(x.k).getDate()}</span></div>`;
+  }).join('')}</div>
+  <div class="legend"><span><i style="background:var(--carb)"></i>Déficit</span><span><i style="background:var(--prot)"></i>Superávit</span><span><i style="background:var(--soft)"></i>Sin registro</span></div>`;
+}
+function deficitTab() {
+  const p = state.profile, tg = calcTargets();
+  const s14 = deficitStats(14, tg), s30 = deficitStats(30, tg);
+  const pr = goalProjection(tg);
+  const warns = deficitWarnings(tg);
+  const ws = [...state.weights].sort((a, b) => a.d.localeCompare(b.d));
+  const from = shiftKey(todayKey(), -30);
+  const w30 = ws.filter(w => w.d >= from);
+  const realKg = w30.length >= 2 ? w30[w30.length - 1].kg - w30[0].kg : null;
+  const tr = weightTrend();
+  return `
+    <div class="grid g4 keep" style="margin-bottom:16px">
+      ${tile('Déficit diario (14 días)', s14.avg === null ? '—' : (s14.avg < 0 ? '+' : '') + fmtKcal(s14.avg), 'kcal', '🔥', s14.avg !== null && s14.avg < 0 ? 'burn' : 'accent')}
+      ${tile('Acumulado 30 días', fmtKcal(s30.sum), 'kcal', '📦')}
+      ${tile('Grasa estimada', (s30.kg >= 0 ? '−' : '+') + fmtKg(s30.kg), 'kg en 30 días', '🧈')}
+      ${tile('Ritmo real', tr === null ? '—' : (tr > 0 ? '+' : '') + r1(tr), `kg/sem (plan ${expectedRate(p) > 0 ? '+' : ''}${expectedRate(p)})`, '📈')}
+    </div>
+    ${warns.length ? `<div class="card"><h2>Para que tu déficit sea sano</h2>${warns.map(w => `<div class="warn-box ${w.lvl}">${w.ico} ${esc(w.txt)}${w.action === 'break' ? '<button class="btn sm" id="dietBreak" style="margin-top:8px">🌴 Hacer 1 semana en mantención</button>' : ''}</div>`).join('')}</div>` : ''}
+    ${tg.breakOn ? `<div class="card"><h2>🌴 Semana de mantención</h2><p class="muted small">Hasta el ${longDate(state.dietBreak.until)} tu meta es tu gasto de mantención (${r0(tg.kcal)} kcal). Después vuelves solo a tu déficit.</p><button class="btn ghost sm" id="endBreak">Terminar antes</button></div>` : ''}
+    <div class="grid g2">
+      <div class="card">
+        <h2>Balance de los últimos 14 días</h2>
+        <p class="muted small" style="margin-top:-6px">Gasto (${r0(tg.tdee)} kcal + ejercicio) menos lo que comiste. Hoy no cuenta porque el día no ha terminado.</p>
+        ${deficitChart(s14.days)}
+      </div>
+      <div class="card">
+        <h2>Tu meta</h2>
+        <div class="grid g2 keep" style="gap:10px">
+          <div class="field"><label for="dMeta">Peso meta (kg)</label><input id="dMeta" type="number" step="0.5" min="30" max="300" inputmode="decimal" value="${p.meta || ''}" placeholder="Ej: ${r0(currentWeight() - 5)}"></div>
+          <div class="field"><label for="dRitmo">Ritmo</label><select id="dRitmo" ${p.objetivo !== 'perder' ? 'disabled' : ''}>${Object.entries(RITMOS).map(([k, x]) => `<option value="${k}" ${k === (p.ritmo || 'moderado') ? 'selected' : ''}>${x.label} (${x.adj} kcal)</option>`).join('')}</select></div>
+        </div>
+        <button class="btn" id="dSave" style="width:100%">Guardar</button>
+        ${pr && pr.date ? `<div class="result-box">🏁 Faltan <b>${fmtKg(pr.diff)} kg</b>. Con tu ${pr.real ? 'déficit real de las últimas 2 semanas' : 'déficit planeado'} (${fmtKg(pr.perWeek)} kg/semana) llegas en <b>${Math.max(1, Math.round(pr.weeks))} semanas</b>, cerca del <b>${longDate(pr.date)}</b>.</div>`
+          : pr && pr.stalled ? `<div class="result-box">Con tu balance actual no te acercas a ${p.meta} kg. ${p.objetivo === 'perder' ? 'Necesitas comer un poco menos o moverte más.' : ''}</div>`
+            : pr && pr.reached ? '<div class="result-box">🏁 ¡Estás en tu peso meta! Puedes pasar tu objetivo a "Mantener peso" en Perfil.</div>' : '<p class="muted small">Pon tu peso meta para ver cuándo llegarías.</p>'}
+        <p class="muted small">${p.objetivo === 'perder' ? 'Suave cuida mejor el músculo y es más fácil de sostener; rápido conviene solo por pocas semanas.' : 'El ritmo aplica cuando tu objetivo es perder grasa.'}</p>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Estimado vs. real (30 días)</h2>
+      <p class="small">Por tu balance deberías haber ${s30.kg >= 0 ? 'perdido' : 'ganado'} unos <b>${fmtKg(s30.kg)} kg</b>${realKg !== null ? `; la balanza dice <b>${realKg > 0 ? '+' : ''}${r1(realKg)} kg</b>.` : '. Registra tu peso para compararlo.'}</p>
+      <p class="muted small">Es normal que no calcen día a día: el agua, la sal y los carbohidratos mueven la balanza. Si después de 3 semanas siguen muy distintos, puede que estés anotando de menos o que tu gasto real sea otro; el ajuste automático de la pestaña Peso corrige eso.</p>
+    </div>`;
+}
+// ---------- Desafíos ----------
+function challengesSection() {
+  const act = state.challenges.filter(c => !c.closed);
+  const done = state.challenges.filter(c => c.closed).slice(-6).reverse();
+  const free = CHALLENGES.filter(d => !act.some(c => c.id === d.id));
+  return `<div class="card">
+    <h2>🎯 Desafíos de 30 días</h2>
+    ${act.map(c => {
+      const pr = challengeProgress(c), today = pr.days[pr.elapsed - 1];
+      return `<div class="ch">
+        <div class="row"><b>${pr.def.ico} ${esc(pr.def.name)}</b><span class="muted small">${pr.done}/${pr.def.need} para ganar</span></div>
+        <div class="muted small">${esc(pr.def.desc)} · día ${pr.elapsed} de ${CHALLENGE_DAYS}</div>
+        <div class="ch-dots">${pr.days.map(x => `<i class="${x.st}" title="${shortDate(x.k)}"></i>`).join('')}</div>
+        <div class="btn-row">${pr.def.manual && today.st !== 'ok' ? `<button class="btn sm" data-check-ch="${c.id}">✓ Hoy lo cumplí</button>` : ''}<button class="see" data-quit-ch="${c.id}">Abandonar</button></div>
+      </div>`;
+    }).join('') || '<p class="muted small">Elige uno para empezar hoy. Cada día que lo cumplas se marca en el calendario.</p>'}
+    ${free.length ? `<h3>Empezar un desafío</h3><div class="quick-grid">${free.map(d => `<button class="quick" data-start-ch="${d.id}" title="${esc(d.desc)}"><span>${d.ico}</span>${esc(d.name)}</button>`).join('')}</div>` : ''}
+    ${done.length ? `<h3>Terminados</h3><div class="list">${done.map(c => { const d = CHALLENGES.find(x => x.id === c.id); return `<div class="item"><span class="fi sm">${c.won ? '🥇' : d.ico}</span><div class="info"><div class="name">${esc(d.name)}</div><div class="muted small">desde el ${shortDate(c.start)}</div></div><span class="muted small">${c.won ? 'cumplido' : 'no alcanzado'}</span></div>`; }).join('')}</div>` : ''}
+  </div>`;
+}
 function viewProgreso() {
   const p = state.profile;
   const tg = calcTargets();
@@ -195,12 +272,13 @@ function viewProgreso() {
   const lastM = ms[ms.length - 1];
   const bf = bodyFat(lastM, p);
   const trend = weightTrend();
-  const expected = GOALS[p.objetivo].rate;
+  const expected = expectedRate(p);
   const change = ws.length ? ws[ws.length - 1].kg - ws[0].kg : 0;
-  const head = pageHead('Progreso') + tabs('prog', ui.progTab, [['peso', '⚖️ Peso'], ['resumen', '📊 Resumen'], ['fuerza', '💪 Fuerza'], ['logros', '🏅 Logros']]);
-  if (ui.progTab === 'resumen') return head + summaryCard();
+  const head = pageHead('Progreso') + tabs('prog', ui.progTab, [['peso', '<span class="te">⚖️ </span>Peso'], ['deficit', '<span class="te">🔥 </span>Déficit'], ['resumen', '<span class="te">📊 </span>Resumen'], ['fuerza', '<span class="te">💪 </span>Fuerza'], ['logros', '<span class="te">🏅 </span>Logros']]);
+  if (ui.progTab === 'deficit') return head + deficitTab();
+  if (ui.progTab === 'resumen') return head + summaryCard() + `<button class="btn ghost" id="lastWeek" style="width:100%">📅 Ver el resumen de la semana pasada</button>`;
   if (ui.progTab === 'fuerza') return head + strengthCard();
-  if (ui.progTab === 'logros') return head + badgesCard() + photosCard();
+  if (ui.progTab === 'logros') return head + challengesSection() + badgesCard() + photosCard();
   return head + `
     <div class="grid g4 keep" style="margin-bottom:16px">
       <div class="stat"><div class="label">Peso actual</div><span class="tile-ico" aria-hidden="true">⚖️</span><div class="value">${r1(currentWeight())} <span class="unit">kg</span></div></div>
@@ -253,6 +331,36 @@ function viewProgreso() {
 }
 bind.progreso = () => {
   $$('[data-tab-prog]').forEach(b => b.addEventListener('click', () => { ui.progTab = b.dataset.tabProg; render(); animateEnter(); }));
+  const lw = $('#lastWeek');
+  if (lw) lw.addEventListener('click', () => showWeekly(shiftKey(mondayOf(todayKey()), -7)));
+  // Déficit
+  const ds = $('#dSave');
+  if (ds) ds.addEventListener('click', () => {
+    const m = Number($('#dMeta').value);
+    if ($('#dMeta').value && !(m >= 30 && m <= 300)) return toast('Revisa el peso meta');
+    state.profile.meta = m || null;
+    if (!$('#dRitmo').disabled) state.profile.ritmo = $('#dRitmo').value;
+    save(); render(); toast('Meta guardada');
+  });
+  const db = $('#dietBreak');
+  if (db) db.addEventListener('click', () => { state.dietBreak = { from: todayKey(), until: shiftKey(todayKey(), 6) }; save(); render(); toast('🌴 Semana de mantención activada'); });
+  const eb = $('#endBreak');
+  if (eb) eb.addEventListener('click', () => { state.dietBreak = null; save(); render(); toast('De vuelta a tu déficit'); });
+  // Desafíos
+  $$('[data-start-ch]').forEach(b => b.addEventListener('click', () => {
+    state.challenges.push({ id: b.dataset.startCh, start: todayKey(), checks: {} });
+    save(); render(); tap(); toast('🎯 ¡Desafío iniciado! Día 1 de 30');
+  }));
+  $$('[data-quit-ch]').forEach(b => b.addEventListener('click', () => {
+    if (!confirm('¿Abandonar este desafío?')) return;
+    state.challenges = state.challenges.filter(c => !(c.id === b.dataset.quitCh && !c.closed));
+    save(); render();
+  }));
+  $$('[data-check-ch]').forEach(b => b.addEventListener('click', () => {
+    const c = state.challenges.find(x => x.id === b.dataset.checkCh && !x.closed);
+    c.checks = { ...(c.checks || {}), [todayKey()]: true };
+    tap(); save(); render(); toast('✓ ¡Un día más!');
+  }));
   $$('[data-wstep]').forEach(b => b.addEventListener('click', () => { $('#wKg').value = r1((Number($('#wKg').value) || 0) + Number(b.dataset.wstep)); tap(); }));
   $$('[data-tab-sum]').forEach(b => b.addEventListener('click', () => { ui.sumRange = Number(b.dataset.tabSum); render(); }));
   paintPhotos();

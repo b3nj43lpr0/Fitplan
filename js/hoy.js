@@ -47,6 +47,110 @@ function nudges(d, tg) {
   }
   return out.filter(n => !dismissed.includes(n.id)).slice(0, 2);
 }
+const fmtKcal = n => Math.round(Math.abs(n)).toLocaleString('es');
+const fmtKg = n => (Math.round(Math.abs(n) * 100) / 100).toLocaleString('es');
+const longDate = k => parseKey(k).toLocaleDateString('es', { day: 'numeric', month: 'long' });
+// Tarjeta de balance: ayer, últimos 7 días y proyección a la meta
+function deficitCard(tg) {
+  const y = dayDeficit(shiftKey(todayKey(), -1), tg);
+  const st = deficitStats(7, tg);
+  const pr = goalProjection(tg);
+  const warn = deficitWarnings(tg).find(w => w.lvl === 'alto');
+  const word = v => v >= 0 ? 'déficit' : 'superávit';
+  if (y === null && !st.logged) return '';
+  return `<div class="card deficit-card">
+    <div class="row"><h2>🔥 Tu balance</h2><button class="see" data-prog-tab="deficit">Ver más ›</button></div>
+    ${tg.breakOn ? `<div class="pill-soft">🌴 Semana de mantención hasta el ${longDate(state.dietBreak.until)}</div>` : ''}
+    <div class="def-grid">
+      <div><span class="muted small">Ayer</span><b class="${y === null ? '' : y >= 0 ? 'good' : 'bad'}">${y === null ? '—' : fmtKcal(y) + ' kcal'}</b><span class="muted small">${y === null ? 'sin registro' : word(y)}</span></div>
+      <div><span class="muted small">Últimos 7 días</span><b class="${st.sum >= 0 ? 'good' : 'bad'}">${fmtKcal(st.sum)} kcal</b><span class="muted small">${word(st.sum)} ≈ ${fmtKg(st.kg)} kg de grasa</span></div>
+    </div>
+    ${pr && pr.date ? `<p class="small" style="margin:10px 0 0">🏁 Meta de ${state.profile.meta} kg: a este ritmo llegas en <b>${Math.max(1, Math.round(pr.weeks))} semanas</b> (≈ ${longDate(pr.date)}).</p>`
+      : pr && pr.stalled ? `<p class="small" style="margin:10px 0 0">🏁 Con tu balance actual no te estás acercando a tu meta de ${state.profile.meta} kg.</p>`
+        : pr && pr.reached ? '<p class="small" style="margin:10px 0 0">🏁 ¡Estás en tu peso meta!</p>' : ''}
+    ${warn ? `<div class="warn-box">${warn.ico} ${esc(warn.txt)}</div>` : ''}
+  </div>`;
+}
+// Cierra los desafíos que ya cumplieron sus 30 días
+function closeChallenges() {
+  let changed = false;
+  state.challenges.filter(c => !c.closed).forEach(c => {
+    const pr = challengeProgress(c);
+    if (pr.finished) {
+      c.closed = true; c.won = pr.won; changed = true;
+      setTimeout(() => { toast(pr.won ? `🥇 ¡Cumpliste el desafío "${pr.def.name}"!` : `Terminó el desafío "${pr.def.name}": ${pr.done}/${CHALLENGE_DAYS} días`); if (pr.won) confetti(); }, 600);
+    }
+  });
+  if (changed) save();
+}
+function challengesCard() {
+  const act = state.challenges.filter(c => !c.closed);
+  if (!act.length) return '';
+  return `<div class="card">
+    <div class="row"><h2>🎯 Desafíos</h2><button class="see" data-prog-tab="logros">Ver todos ›</button></div>
+    <div class="list">${act.map(c => {
+      const pr = challengeProgress(c), today = pr.days[pr.elapsed - 1];
+      return `<div class="item">
+        <span class="fi sm">${pr.def.ico}</span>
+        <div class="info"><div class="name">${esc(pr.def.name)}</div><div class="muted small">Día ${pr.elapsed} de ${CHALLENGE_DAYS} · ${pr.done} cumplidos (meta ${pr.def.need})</div>
+          <div class="bar" style="margin-top:6px"><span style="width:${pr.done / pr.def.need * 100}%;background:var(--accent)"></span></div></div>
+        ${today.st === 'ok' ? '<span class="ok-badge">✓ hoy</span>' : pr.def.manual ? `<button class="btn sm" data-check-ch="${c.id}">Hoy ✓</button>` : '<span class="muted small">pendiente</span>'}
+      </div>`;
+    }).join('')}</div>
+  </div>`;
+}
+// ---------- Resumen semanal (aparece una vez, el primer día que abres la app en la semana) ----------
+function mondayOf(k) { const d = parseKey(k); return shiftKey(k, -((d.getDay() + 6) % 7)); }
+function weeklyReport(start) {
+  const tg = calcTargets();
+  const keys = Array.from({ length: 7 }, (_, i) => shiftKey(start, i));
+  const logged = keys.filter(k => peekDay(k).foods.length);
+  const tt = logged.map(k => totals(peekDay(k)));
+  const avg = f => tt.length ? tt.reduce((a, t) => a + f(t), 0) / tt.length : 0;
+  const def = logged.reduce((a, k) => a + dayDeficit(k, tg), 0);
+  const trainDays = keys.filter(k => peekDay(k).exercises.length).length;
+  const ws = state.weights.filter(w => w.d >= shiftKey(start, -3) && w.d <= keys[6]).sort((a, b) => a.d.localeCompare(b.d));
+  const wch = ws.length >= 2 ? ws[ws.length - 1].kg - ws[0].kg : null;
+  const inGoal = keys.filter(k => dayInGoal(k, tg)).length;
+  const water = keys.filter(k => peekDay(k).water >= tg.water).length;
+  // Una sugerencia concreta: la primera que aplique
+  const tips = [
+    [logged.length < 5, `Registraste ${logged.length} de 7 días. Esta semana apunta a 5 o más: lo que no se anota no se puede ajustar.`],
+    [avg(t => t.p) < tg.prot * 0.85, `Tu proteína promedio fue ${r0(avg(t => t.p))} g de ${r0(tg.prot)} g. Suma una porción de proteína al desayuno (huevos, yogur griego o quesillo).`],
+    [state.profile.objetivo === 'perder' && def / Math.max(1, logged.length) > 1000, 'Tu déficit fue muy alto. Come un poco más para no perder músculo ni energía.'],
+    [state.profile.objetivo === 'perder' && def <= 0 && logged.length >= 4, 'No hubo déficit esta semana. Revisa los snacks y bebidas, suelen ser los que más suman.'],
+    [state.routine && trainDays < state.routine.dias, `Entrenaste ${trainDays} de ${state.routine ? state.routine.dias : 0} días de tu rutina. Agenda los entrenamientos como una cita.`],
+    [water < 4, `Cumpliste tu meta de agua ${water} de 7 días. Deja una botella a la vista.`],
+    [true, '¡Gran semana! Mantén lo que estás haciendo.'],
+  ];
+  return { keys, logged: logged.length, avgKcal: avg(t => t.kcal), avgP: avg(t => t.p), def, trainDays, wch, inGoal, tip: tips.find(t => t[0])[1], tg };
+}
+function showWeekly(start) {
+  const w = weeklyReport(start);
+  const word = w.def >= 0 ? 'déficit' : 'superávit';
+  openModal(`<div class="weekly">
+    <div class="rc-hero">📊</div>
+    <h2 style="margin-bottom:2px">Tu semana</h2>
+    <p class="muted small" style="margin-top:0">${shortDate(w.keys[0])} al ${shortDate(w.keys[6])}</p>
+    <div class="minis" style="grid-template-columns:repeat(2,1fr)">
+      <div class="mini"><b>${w.logged}/7</b><span>días registrados</span></div>
+      <div class="mini"><b>${w.inGoal}/7</b><span>días en la meta</span></div>
+      <div class="mini"><b>${r0(w.avgKcal)}</b><span>kcal promedio (meta ${r0(w.tg.kcal)})</span></div>
+      <div class="mini"><b>${r0(w.avgP)} g</b><span>proteína promedio</span></div>
+      <div class="mini"><b class="${w.def >= 0 ? 'good' : 'bad'}">${fmtKcal(w.def)}</b><span>kcal de ${word} ≈ ${fmtKg(w.def / KCAL_KG)} kg</span></div>
+      <div class="mini"><b>${w.trainDays}</b><span>días con ejercicio</span></div>
+    </div>
+    ${w.wch !== null ? `<p class="small">⚖️ Peso: <b>${w.wch > 0 ? '+' : ''}${r1(w.wch)} kg</b> en la semana.</p>` : ''}
+    <div class="hint-box">💡 ${esc(w.tip)}</div>
+    <button class="btn" id="wkOk" style="width:100%">¡Vamos por esta semana!</button></div>`, m => m.querySelector('#wkOk').addEventListener('click', closeModal));
+}
+function maybeWeekly() {
+  const last = shiftKey(mondayOf(todayKey()), -7);
+  if (state.weeklySeen === last || !state.profile) return;
+  if (Array.from({ length: 7 }, (_, i) => shiftKey(last, i)).filter(k => peekDay(k).foods.length).length < 2) return;
+  state.weeklySeen = last; save();
+  setTimeout(() => { if (!$('.modal-back')) showWeekly(last); }, 700);
+}
 function viewHoy() {
   const tg = calcTargets();
   const d = peekDay(currentDate);
@@ -155,6 +259,8 @@ function viewHoy() {
             <button class="round-btn water-plus" data-water-step="1" aria-label="Agregar un vaso">＋</button>
           </div>
         </div>
+        ${deficitCard(tg)}
+        ${challengesCard()}
         <div class="card">
           <div class="row"><h2>Últimos 7 días</h2><button class="see" data-go="progreso">Ver progreso ›</button></div>
           <div class="chart">${chart}</div>
@@ -203,6 +309,14 @@ bind.hoy = () => {
     if (kind === 'train') { ui.rutTab = 'rutina'; go('rutinas'); startWorkout(Number(arg)); }
   }));
   bindLogRecipe(currentDate);
+  $$('[data-prog-tab]').forEach(b => b.addEventListener('click', () => { ui.progTab = b.dataset.progTab; go('progreso'); }));
+  $$('[data-check-ch]').forEach(b => b.addEventListener('click', () => {
+    const c = state.challenges.find(x => x.id === b.dataset.checkCh && !x.closed);
+    c.checks = { ...(c.checks || {}), [todayKey()]: true };
+    tap(); save(); render(); toast('✓ ¡Un día más!');
+  }));
+  closeChallenges();
+  maybeWeekly();
 };
 
 // Editar cantidad o comida de un registro del día

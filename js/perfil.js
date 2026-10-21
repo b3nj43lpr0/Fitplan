@@ -20,6 +20,8 @@ function viewPerfil() {
         <div class="field"><label for="pAct">Nivel de actividad</label><select id="pAct">${ACTIVITY_LEVELS.map(a => `<option value="${a.v}" ${a.v === Number(p.actividad) ? 'selected' : ''}>${a.label}</option>`).join('')}</select></div>
         <div class="grid g2 keep" style="gap:10px">
           <div class="field"><label for="pObj">Objetivo</label><select id="pObj">${Object.entries(GOALS).map(([k, g]) => `<option value="${k}" ${k === p.objetivo ? 'selected' : ''}>${g.label}</option>`).join('')}</select></div>
+          <div class="field"><label for="pRitmo">Ritmo para perder</label><select id="pRitmo">${Object.entries(RITMOS).map(([k, x]) => `<option value="${k}" ${k === (p.ritmo || 'moderado') ? 'selected' : ''}>${x.label} (${x.adj} kcal)</option>`).join('')}</select></div>
+          <div class="field"><label for="pMeta">Peso meta (kg)</label><input id="pMeta" type="number" min="30" max="300" step="0.5" inputmode="decimal" value="${p.meta || ''}" placeholder="Opcional"></div>
           <div class="field"><label for="pDieta">Tipo de dieta</label><select id="pDieta">${Object.entries(DIETS).map(([k, d]) => `<option value="${k}" ${k === (p.dieta || 'equilibrada') ? 'selected' : ''}>${d.label}</option>`).join('')}</select></div>
         </div>
         <button class="btn" id="saveProfile" style="width:100%">${state.profile ? 'Guardar cambios' : 'Calcular y empezar'}</button>
@@ -93,7 +95,8 @@ bind.perfil = () => {
       ...(state.profile || {}),
       nombre: $('#pNombre').value.trim(), sexo: $('#pSexo').value, edad: Number($('#pEdad').value),
       peso: Number($('#pPeso').value), altura: Number($('#pAltura').value), actividad: Number($('#pAct').value),
-      objetivo: $('#pObj').value, dieta: $('#pDieta').value,
+      objetivo: $('#pObj').value, dieta: $('#pDieta').value, ritmo: $('#pRitmo').value,
+      meta: Number($('#pMeta').value) || null,
     };
     if (!(p.edad >= 12 && p.peso >= 30 && p.altura >= 120)) return toast('Revisa edad, peso y altura');
     const first = !state.profile;

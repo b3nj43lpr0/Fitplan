@@ -48,6 +48,14 @@ Los datos se guardan en tu cuenta de Firebase y se actualizan en todos tus dispo
 - **Diseño**: tema claro, oscuro o automático y 5 colores a elección (Perfil → Apariencia), animaciones, confeti en logros y entrenamientos, y deslizar el dedo en Hoy, Comidas o Ejercicio para cambiar de día.
 - **Recordatorios**: avisos en Hoy según la hora (comidas sin registrar, agua, entrenamiento pendiente) con botón de acción directa.
 
+## Déficit calórico y motivación
+
+- **Ritmo para perder**: suave (−300 kcal), moderado (−500) o rápido (−750), en Perfil o en Progreso → Déficit.
+- **Balance**: Hoy muestra el déficit de ayer y de los últimos 7 días con la grasa estimada (7.700 kcal ≈ 1 kg). Progreso → Déficit tiene el gráfico de 14 días, el acumulado de 30 días, lo estimado contra lo que dice la balanza y cuándo llegarías a tu peso meta.
+- **Avisos** si el déficit es muy agresivo, si comes bajo tu metabolismo basal, si bajas más de 1 % por semana o si falta proteína. Después de 8 semanas en déficit sugiere una semana en mantención.
+- **Resumen semanal** automático el primer día que abres la app en la semana, con una sugerencia concreta.
+- **Desafíos de 30 días**: proteína, agua, registro, déficit, entrenamientos, pasos, sin bebidas azucaradas y sueño.
+
 ## Sin señal y accesos directos
 
 - La app abre sin internet y, si la señal es mala, no espera más de 3 segundos antes de usar lo guardado.
