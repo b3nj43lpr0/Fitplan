@@ -455,7 +455,7 @@ function exHistory(exId, n = 5) {
 
 // ---------- Modo entrenamiento ----------
 // La sesión en curso se guarda solo en este dispositivo para no sincronizar cada serie
-const SESSION_KEY = 'fitplan-session';
+const SESSION_KEY = pkey('fitplan-session');
 function activeSession() {
   // Una sesión suelta guarda su propio día; una de la rutina apunta a su índice
   try { const x = JSON.parse(localStorage.getItem(SESSION_KEY)); return x && (x.day || (state.routine && state.routine.days[x.dayIdx])) ? x : null; } catch (e) { return null; }

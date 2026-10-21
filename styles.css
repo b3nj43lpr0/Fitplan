@@ -717,3 +717,10 @@ body:has(.modal-back) .toast { bottom: auto; top: calc(16px + env(safe-area-inse
 .cd-kcal { text-align: center; color: var(--burn); margin-bottom: 14px; }
 .hist { display: grid; gap: 4px; margin-top: 8px; }
 .hist-row { display: grid; grid-template-columns: 80px 1fr auto; gap: 8px; align-items: center; font-size: 13px; padding: 6px 8px; background: var(--soft); border-radius: 10px; }
+
+/* ---------- Perfiles ---------- */
+button.avatar { border: 0; cursor: pointer; font-family: inherit; }
+.avatar.sm { width: 34px; height: 34px; font-size: 14px; }
+.prof-row { width: 100%; border: 0; background: none; text-align: left; cursor: pointer; color: var(--text); font: inherit; border-radius: 12px; padding-left: 6px; padding-right: 6px; }
+.prof-row:hover { background: var(--soft); }
+.prof-row.on { background: var(--accent-soft); }

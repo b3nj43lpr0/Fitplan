@@ -3,7 +3,7 @@
 
 // ---------- Cronómetro de cardio ----------
 // Se guarda en este dispositivo para que siga corriendo aunque cambies de pantalla o cierres la app
-const CARDIO_KEY = 'fitplan-cardio';
+const CARDIO_KEY = pkey('fitplan-cardio');
 const CARDIO_ACTS = ['caminarrapido', 'trotar', 'correr', 'bici', 'biciestatica', 'spinning', 'eliptica', 'remo', 'natacion', 'trekking', 'cuerda', 'stepper'];
 function cardioState() { try { return JSON.parse(localStorage.getItem(CARDIO_KEY)) || null; } catch (e) { return null; } }
 function storeCardio(c) { try { c ? localStorage.setItem(CARDIO_KEY, JSON.stringify(c)) : localStorage.removeItem(CARDIO_KEY); } catch (e) { /* ignorar */ } }

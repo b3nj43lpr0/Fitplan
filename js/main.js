@@ -39,6 +39,7 @@
   if (a === 'entrenar') { ui.rutTab = 'rutina'; view = 'rutinas'; }
   if (a === 'peso') { ui.progTab = 'peso'; view = 'progreso'; }
 })();
+syncProfileName();
 render();
 animateEnter();
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {

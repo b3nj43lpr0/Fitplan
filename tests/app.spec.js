@@ -438,3 +438,29 @@ test('Entrenamiento: historial, semana de descarga y cronómetro de cardio', asy
   expect(ex).toMatchObject({ minutes: 30, km: 5 });
   expect(ex.name).toContain('6:00 min/km');
 });
+
+test('Varias personas en el mismo teléfono', async ({ page }) => {
+  await page.click('#avatarBtn');
+  await page.fill('#newProf', 'Sofía');
+  await Promise.all([page.waitForEvent('load'), page.click('#addProf')]);
+  // Perfil nuevo: empieza vacío, en la bienvenida y con su nombre puesto
+  await expect(page.locator('#pNombre')).toHaveValue('Sofía');
+  await page.fill('#pPeso', '60');
+  await page.fill('#pAltura', '165');
+  await page.selectOption('#pSexo', 'm');
+  await page.click('#saveProfile');
+  await expect(page.locator('.hello .name')).toHaveText('Sofía');
+  expect(Object.keys((await state(page)).days)).toHaveLength(0);
+  const idx = await page.evaluate(() => profilesIndex());
+  expect(idx.list.map(p => p.name)).toEqual(['Benja', 'Sofía']);
+  // Volver a Benja: sus datos siguen ahí
+  await page.click('#avatarBtn');
+  await Promise.all([page.waitForEvent('load'), page.click(`[data-switch="p1"]`)]);
+  await expect(page.locator('.hello .name')).toHaveText('Benja');
+  expect(Object.keys((await state(page)).days).length).toBeGreaterThan(10);
+  // Eliminar a Sofía desde Perfil
+  await page.click('.hello [data-go=perfil]');
+  await page.click('[data-del-p]');
+  expect((await page.evaluate(() => profilesIndex())).list).toHaveLength(1);
+  expect(await page.evaluate(() => Object.keys(localStorage).filter(k => k.startsWith('fitplan-v1-')))).toEqual([]);
+});

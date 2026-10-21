@@ -265,7 +265,7 @@ function viewHoy() {
 
   return `
     <div class="hello">
-      <div class="avatar" aria-hidden="true">${esc((state.profile.nombre || 'T').trim().charAt(0).toUpperCase())}</div>
+      <button class="avatar" id="avatarBtn" aria-label="Cambiar de persona" title="Cambiar de persona">${initial(state.profile.nombre)}</button>
       <div class="who"><div class="greet">${greeting()} 👋</div><div class="name">${esc(state.profile.nombre || 'Hola')}</div></div>
       ${streak() ? `<button class="streak" data-go="progreso" title="Días seguidos registrando">🔥 ${streak()}</button>` : ''}
       <button class="round-btn" data-go="perfil" aria-label="Perfil">⚙️</button>
@@ -369,6 +369,7 @@ bind.hoy = () => {
     if (kind === 'train') { ui.rutTab = 'rutina'; go('rutinas'); startWorkout(Number(arg)); }
   }));
   bindLogRecipe(currentDate);
+  $('#avatarBtn').addEventListener('click', openProfiles);
   $$('[data-prog-tab]').forEach(b => b.addEventListener('click', () => { ui.progTab = b.dataset.progTab; go('progreso'); }));
   $$('[data-check-ch]').forEach(b => b.addEventListener('click', () => {
     const c = state.challenges.find(x => x.id === b.dataset.checkCh && !x.closed);

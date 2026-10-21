@@ -3,7 +3,7 @@
 
 // ---------- Vista: Perfil ----------
 function viewPerfil() {
-  const p = state.profile || { nombre: '', sexo: 'h', edad: 25, peso: 70, altura: 170, actividad: 1.375, objetivo: 'mantener', dieta: 'equilibrada' };
+  const p = state.profile || { nombre: (profilesIndex().list.find(x => x.id === PROFILE_ID) || {}).name || '', sexo: 'h', edad: 25, peso: 70, altura: 170, actividad: 1.375, objetivo: 'mantener', dieta: 'equilibrada' };
   const tg = state.profile ? calcTargets() : null;
   return `
     <h1>${state.profile ? 'Perfil y ajustes' : 'Bienvenido 👋'}</h1>
@@ -59,6 +59,13 @@ function viewPerfil() {
           <div class="field" style="margin-top:8px"><label for="fastPlan">Horas de ayuno</label><select id="fastPlan">${FAST_PLANS.map(h => `<option value="${h}" ${h === (state.fasting ? state.fasting.plan : 16) ? 'selected' : ''}>${h}:${24 - h} (${h} h de ayuno, ${24 - h} h para comer)</option>`).join('')}</select></div>
           <p class="muted small">El ayuno no reemplaza el déficit: lo que cuenta es el total del día. A algunas personas les ayuda a ordenar los horarios.</p>
         </div>
+        <div class="card">
+          <h2>👥 Personas en este teléfono</h2>
+          <p class="muted small" style="margin-top:-6px">Cada una tiene sus propios datos. Para cambiar rápido, toca la inicial en Hoy.</p>
+          <div class="list">${profilesIndex().list.map(pp => `<div class="item"><span class="avatar sm">${initial(pp.name)}</span><div class="info"><div class="name">${esc(pp.name || 'Sin nombre')}${pp.id === PROFILE_ID ? ' <span class="ok-badge">en uso</span>' : ''}</div></div>
+            ${pp.id === PROFILE_ID ? '' : `<button class="btn ghost sm" data-switch-p="${pp.id}">Cambiar</button><button class="icon-btn" data-del-p="${pp.id}" aria-label="Eliminar perfil">✕</button>`}</div>`).join('')}</div>
+          <button class="btn ghost" id="openProfiles" style="width:100%;margin-top:10px">＋ Agregar persona</button>
+        </div>
         <div class="card" id="syncCard"></div>
         <div class="card">
           <h2>Créditos</h2>
@@ -82,6 +89,13 @@ function syncCardHtml() {
 }
 let offSync = null;
 bind.perfil = () => {
+  const op = $('#openProfiles'); if (op) op.addEventListener('click', openProfiles);
+  $$('[data-switch-p]').forEach(b => b.addEventListener('click', () => switchProfile(b.dataset.switchP)));
+  $$('[data-del-p]').forEach(b => b.addEventListener('click', () => {
+    const p = profilesIndex().list.find(x => x.id === b.dataset.delP);
+    if (!confirm(`¿Eliminar a ${p.name || 'este perfil'} y todos sus datos de este teléfono? Lo sincronizado en la nube no se borra.`)) return;
+    deleteProfile(p.id); render(); toast('Perfil eliminado');
+  }));
   const fo = $('#fastOn'), fp = $('#fastPlan');
   const setFast = () => { state.fasting = { log: [], start: null, ...(state.fasting || {}), on: fo.checked, plan: Number(fp.value) }; save(); toast(fo.checked ? '⏱️ Ayuno activado: lo verás en Hoy' : 'Ayuno desactivado'); };
   if (fo) { fo.addEventListener('change', setFast); fp.addEventListener('change', setFast); }
@@ -114,7 +128,7 @@ bind.perfil = () => {
       state.weights = state.weights.filter(w => w.d !== todayKey());
       state.weights.push({ d: todayKey(), kg: r1(p.peso) });
     }
-    state.profile = p; save();
+    state.profile = p; save(); syncProfileName();
     toast(first ? `¡Listo! Tu objetivo es ${r0(calcTargets().kcal)} kcal/día` : 'Perfil actualizado');
     first ? go('hoy') : render();
   });
