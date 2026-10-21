@@ -171,7 +171,7 @@ bind.hoy = () => {
   bindDateBar();
   $$('[data-del-food]').forEach(b => b.addEventListener('click', e => {
     e.stopPropagation();
-    const d = day(); d.foods = d.foods.filter(f => f.id !== b.dataset.delFood); save(); render();
+    removeWithUndo(day().foods, f => f.id === b.dataset.delFood);
   }));
   $$('[data-edit-food]').forEach(el => {
     const open = () => editFoodEntry(el.dataset.editFood);
@@ -185,7 +185,7 @@ bind.hoy = () => {
     save(); render(); toast(`Copiado: ${src.length} ${src.length === 1 ? 'alimento' : 'alimentos'} de ayer`);
   }));
   $$('[data-del-ex]').forEach(b => b.addEventListener('click', () => {
-    const d = day(); d.exercises = d.exercises.filter(e => e.id !== b.dataset.delEx); save(); render();
+    removeWithUndo(day().exercises, e => e.id === b.dataset.delEx, 'Actividad eliminada');
   }));
   $$('[data-water-step]').forEach(b => b.addEventListener('click', () => {
     const d = day();
@@ -244,7 +244,7 @@ function editFoodEntry(id) {
       save(); fv.textContent = isFav(food.id) ? '★ En favoritas' : '☆ Favorita';
     });
     m.querySelector('#eDel').addEventListener('click', () => {
-      d.foods = d.foods.filter(x => x.id !== id); save(); closeModal(); render(); toast('Eliminado');
+      closeModal(); removeWithUndo(d.foods, x => x.id === id);
     });
   });
 }

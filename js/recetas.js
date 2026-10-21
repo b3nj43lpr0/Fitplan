@@ -85,15 +85,15 @@ function openRecipe(id, factor = 1) {
     if (ed) ed.addEventListener('click', () => recipeEditor(rec.id));
   });
 }
-function bindLogRecipe(dateKey = todayKey()) {
-  $$('[data-log-recipe]').forEach(b => b.addEventListener('click', e => {
+function bindLogRecipe(dateKey = todayKey(), root = document) {
+  root.querySelectorAll('[data-log-recipe]').forEach(b => b.addEventListener('click', e => {
     e.stopPropagation();
     const rec = allRecipes().find(r => r.id === b.dataset.logRecipe);
     logRecipe(rec, Number(b.dataset.factor), b.dataset.meal, dateKey);
     b.classList.add('pop'); setTimeout(() => b.classList.remove('pop'), 400);
     if (view === 'hoy') render();
   }));
-  $$('[data-open-recipe]').forEach(el => {
+  root.querySelectorAll('[data-open-recipe]').forEach(el => {
     const open = () => openRecipe(el.dataset.openRecipe, Number(el.dataset.factor) || 1);
     el.addEventListener('click', open);
     el.addEventListener('keydown', ev => { if (ev.key === 'Enter') open(); });
@@ -162,6 +162,24 @@ function recipeEditor(id) {
     });
   });
 }
+// Lista filtrada por tipo, etiqueta y búsqueda. La búsqueda mira el nombre y los ingredientes:
+// "pollo arroz" muestra primero las recetas que usan ambos.
+function recipeListHtml() {
+  const words = norm(ui.recipeQuery || '').split(/[\s,]+/).filter(w => w.length > 1);
+  let list = allRecipes().filter(r => (ui.recipeType === 'todas' || r.tipo === ui.recipeType) && (ui.recipeTag === 'todas' || (ui.recipeTag === 'mias' ? r.custom : r.tags.includes(ui.recipeTag))));
+  let hits = null;
+  if (words.length) {
+    hits = new Map();
+    list.forEach(r => {
+      const ingNames = r.ing.map(([id]) => { const f = foodById(id); return f ? norm(f.name) : ''; });
+      const found = words.filter(w => norm(r.name).includes(w) || ingNames.some(n => n.includes(w)));
+      if (found.length) hits.set(r.id, found);
+    });
+    list = list.filter(r => hits.has(r.id)).sort((a, b) => hits.get(b.id).length - hits.get(a.id).length);
+  }
+  return `<p class="muted small" style="margin:4px 0 8px">${list.length} recetas${words.length ? ` con ${words.join(', ')}` : ''}</p>
+    <div class="rgrid">${list.map(r => recipeCard(r, 1, hits ? `✓ ${hits.get(r.id).length === words.length ? 'Tiene todo lo que buscas' : 'Tiene ' + hits.get(r.id).join(', ')}` : '')).join('') || '<p class="muted">No hay recetas con esos filtros.</p>'}</div>`;
+}
 function viewRecetas() {
   const head = pageHead('Recetas') + tabs('rec', ui.recipeTab, [['recetas', '🍽️ Qué comer'], ['plan', '🗓️ Plan'], ['compras', '🛒 Compras']]);
   if (ui.recipeTab === 'plan') return head + viewPlan();
@@ -170,7 +188,6 @@ function viewRecetas() {
   const { meal, target, left } = nextMealTarget();
   const tipos = ['todas', 'desayuno', 'almuerzo', 'cena', 'snack'];
   const tags = ['todas', 'mias', 'alta-proteina', 'vegetariana', 'rapida', 'economica'];
-  const list = allRecipes().filter(r => (ui.recipeType === 'todas' || r.tipo === ui.recipeType) && (ui.recipeTag === 'todas' || (ui.recipeTag === 'mias' ? r.custom : r.tags.includes(ui.recipeTag))));
   const sugg = (ui.suggest || []).map(id => allRecipes().find(r => r.id === id)).filter(Boolean);
   return head + `
     <div class="card next-meal">
@@ -182,10 +199,10 @@ function viewRecetas() {
     </div>
     ${sugg.length ? `<h2>Sugerencias para ti</h2><div class="rgrid">${sugg.map(r => recipeCard(r, scaleFactor(r, left > 0 ? target : 200), 'Porción ajustada a lo que te queda hoy')).join('')}</div>` : ''}
     <div class="row" style="margin-top:8px"><h2 style="margin:0">Todas las recetas</h2><button class="btn sm" id="newRecipe">＋ Crear receta</button></div>
+    <input id="recSearch" type="search" placeholder="🔎 Busca por nombre o lo que tengas: pollo, arroz…" value="${esc(ui.recipeQuery || '')}" autocomplete="off" style="margin:10px 0">
     <div class="chips scroll-x">${tipos.map(t => `<button class="chip ${t === ui.recipeType ? 'active' : ''}" data-rtype="${t}">${t === 'todas' ? 'Todas' : (TIPO_ICO[t] || '') + ' ' + t[0].toUpperCase() + t.slice(1)}</button>`).join('')}</div>
     <div class="chips scroll-x">${tags.map(t => `<button class="chip ${t === ui.recipeTag ? 'active' : ''}" data-rtag="${t}">${t === 'todas' ? 'Cualquiera' : t === 'mias' ? '👩‍🍳 Mis recetas' : TAG_LABEL[t]}</button>`).join('')}</div>
-    <p class="muted small" style="margin:4px 0 8px">${list.length} recetas</p>
-    <div class="rgrid">${list.map(r => recipeCard(r)).join('') || '<p class="muted">No hay recetas con esos filtros.</p>'}</div>`;
+    <div id="recList">${recipeListHtml()}</div>`;
 }
 function generatePlan() {
   const tg = calcTargets();
@@ -267,6 +284,9 @@ bind.recetas = () => {
   $$('[data-tab-rec]').forEach(b => b.addEventListener('click', () => { ui.recipeTab = b.dataset.tabRec; render(); }));
   $$('[data-rtype]').forEach(b => b.addEventListener('click', () => { ui.recipeType = b.dataset.rtype; render(); }));
   $$('[data-rtag]').forEach(b => b.addEventListener('click', () => { ui.recipeTag = b.dataset.rtag; render(); }));
+  // Al escribir solo se redibuja la lista, así el teclado no se cierra
+  const rs = $('#recSearch');
+  if (rs) rs.addEventListener('input', () => { ui.recipeQuery = rs.value; $('#recList').innerHTML = recipeListHtml(); bindLogRecipe(todayKey(), $('#recList')); });
   const sb = $('#suggestBtn');
   if (sb) sb.addEventListener('click', () => {
     const { meal, target, left } = nextMealTarget();

@@ -94,6 +94,53 @@ function slotTags(x, list) {
     + (x.finisher ? ' <span class="tag type">final</span>' : '')
     + (x.stretch ? ' <span class="tag neutral">estiramiento</span>' : '');
 }
+// ---------- Sin señal: guardar imágenes de ejercicios en la caché del service worker ----------
+const STATIC_CACHE = 'fitplan-static-v1';
+const offlineOk = () => 'caches' in window && 'serviceWorker' in navigator && location.protocol.startsWith('http');
+function imgUrls(ids) {
+  return [...new Set(ids)].map(exById).filter(e => e && e.img).flatMap(e => e.img.map(im => EX_IMG_BASE + im));
+}
+const routineImgs = () => state.routine ? imgUrls(state.routine.days.flatMap(d => d.exercises.map(x => x.ex))) : [];
+async function countCached(urls) {
+  if (!offlineOk()) return 0;
+  const c = await caches.open(STATIC_CACHE);
+  const hits = await Promise.all(urls.map(u => c.match(u)));
+  return hits.filter(Boolean).length;
+}
+// Descarga con 4 a la vez; el service worker las guarda al pasar
+async function saveOffline(urls, onProgress) {
+  let i = 0, done = 0, failed = 0;
+  const c = await caches.open(STATIC_CACHE);
+  const worker = async () => {
+    while (i < urls.length) {
+      const u = urls[i++];
+      if (!(await c.match(u))) {
+        try { const res = await fetch(u); if (res.ok) await c.put(u, res); else failed++; } catch (e) { failed++; }
+      }
+      done++;
+      if (onProgress) onProgress(done, urls.length);
+    }
+  };
+  await Promise.all([worker(), worker(), worker(), worker()]);
+  return failed;
+}
+async function paintOffline() {
+  const box = $('#offlineBox');
+  if (!box || !offlineOk()) return;
+  const urls = routineImgs();
+  const n = await countCached(urls);
+  if (!$('#offlineBox')) return;
+  box.innerHTML = n >= urls.length
+    ? '<span class="muted small">📶 Lista para entrenar sin señal</span>'
+    : `<button class="see" id="offlineBtn">📥 Guardar mi rutina para usarla sin señal (${urls.length - n} imágenes)</button>`;
+  const b = $('#offlineBtn');
+  if (b) b.addEventListener('click', async () => {
+    b.disabled = true;
+    const failed = await saveOffline(urls, (d, t) => { b.textContent = `Guardando… ${d}/${t}`; });
+    toast(failed ? 'Algunas imágenes no se pudieron guardar; inténtalo con mejor señal' : '📶 Rutina guardada para entrenar sin señal');
+    paintOffline();
+  });
+}
 function viewRutinas() {
   const head = pageHead('Entrenar') + tabs('rut', ui.rutTab, [['rutina', '🏋️ Mi rutina'], ['actividad', '🔥 Actividad'], ['biblioteca', '📚 Ejercicios']]);
   return head + (ui.rutTab === 'biblioteca' ? viewBiblioteca() : ui.rutTab === 'actividad' ? viewEjercicio() : viewMiRutina());
@@ -124,6 +171,7 @@ function viewMiRutina() {
         <b class="wk-title">Semana: ${done} de ${r.days.length} entrenamientos</b></div>
         <button class="round-btn" id="cfgToggle" aria-label="Ajustar rutina" aria-expanded="${!!ui.rutCfg}">⚙️</button></div>
       <div class="week-dots">${r.days.map((x, i) => `<span class="${x.done ? 'on' : i === next ? 'next' : ''}"></span>`).join('')}</div>
+      ${offlineOk() ? '<div id="offlineBox" class="offline-box"></div>' : ''}
       ${ui.rutCfg ? `<div class="cfg-box">${cfg}</div>` : ''}
     </div>
     ${r.days.map((dd, i) => { const isOpen = i === open; return `
@@ -159,6 +207,7 @@ function viewBiblioteca() {
       <div class="chips scroll-x">${groups.map(g => `<button class="chip ${g === ui.exGroup ? 'active' : ''}" data-exg="${g}">${g === 'todos' ? 'Todos' : g[0].toUpperCase() + g.slice(1)}</button>`).join('')}</div>
       <div class="chips">${Object.entries(equips).map(([k, l]) => `<button class="chip ${k === ui.exEquip ? 'active' : ''}" data-exe="${k}">${l}</button>`).join('')}</div>
       <div class="row"><span class="muted small">${list.length} ejercicios${list.length > shown.length ? ` (mostrando ${shown.length}; filtra para ver otros)` : ''}</span><button class="btn sm ghost" id="newEx">＋ Crear ejercicio</button></div>
+      ${offlineOk() ? '<button class="see" id="libOffline">📥 Descargar todas las imágenes para usar sin señal (≈22 MB)</button>' : ''}
     </div>
     <div class="ex-grid">${shown.map(e => `
       <button class="ex-card" data-ex="${e.id}">
@@ -225,6 +274,14 @@ bind.rutinas = () => {
     render();
     const s = $('#exSearch'); s.focus(); s.setSelectionRange(pos, pos);
   });
+  paintOffline();
+  const lo = $('#libOffline');
+  if (lo) lo.addEventListener('click', async () => {
+    if (!confirm('Se descargarán unas 1.300 imágenes (≈22 MB). Conviene hacerlo con wifi. ¿Continuar?')) return;
+    lo.disabled = true;
+    const failed = await saveOffline(imgUrls(exDB().map(e => e.id)), (d, t) => { lo.textContent = `Descargando… ${d}/${t}`; });
+    lo.textContent = failed ? `Listo, faltaron ${failed} imágenes (vuelve a intentarlo)` : '📶 Biblioteca completa guardada';
+  });
   const ne = $('#newEx');
   if (ne) ne.addEventListener('click', () => openModal(`
     <h2>Crear ejercicio</h2>
@@ -260,6 +317,8 @@ bind.rutinas = () => {
     });
     ui.rutCfg = false; ui.openDay = undefined;
     save(); render(); toast('Rutina generada');
+    // Las imágenes de la rutina nueva se guardan solas para entrenar sin señal
+    if (offlineOk()) saveOffline(routineImgs()).then(paintOffline);
   });
   $$('[data-done]').forEach(b => b.addEventListener('click', () => { setDayDone(Number(b.dataset.done)); ui.openDay = undefined; save(); render(); }));
   $$('[data-toggle-day]').forEach(b => b.addEventListener('click', () => {
