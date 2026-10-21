@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#6a1bf5">
+  <meta name="description" content="Cuenta calorías, registra comidas y ejercicio, y genera recetas y rutinas.">
+  <title>FitPlan</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app">
+    <nav class="nav" aria-label="Secciones">
+      <div class="brand"><img src="icon.svg" alt="" width="28" height="28"><span>FitPlan</span></div>
+      <button data-view="hoy" class="active"><span class="ico">🏠</span><span>Hoy</span></button>
+      <button data-view="comidas"><span class="ico">🍽️</span><span>Comidas</span></button>
+      <button data-view="ejercicio"><span class="ico">🔥</span><span>Ejercicio</span></button>
+      <button data-view="recetas"><span class="ico">🥗</span><span>Recetas</span></button>
+      <button data-view="rutinas"><span class="ico">🏋️</span><span>Rutinas</span></button>
+      <button data-view="progreso"><span class="ico">📈</span><span>Progreso</span></button>
+      <button data-view="perfil"><span class="ico">👤</span><span>Perfil</span></button>
+    </nav>
+    <main id="main"></main>
+  </div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="foods.js"></script>
+  <script src="exercises.js"></script>
+  <script src="data.js"></script>
+  <script src="vendor/zxing.min.js" async></script>
+  <script src="app.js"></script>
+</body>
+</html>

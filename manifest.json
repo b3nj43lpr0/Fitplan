@@ -1,0 +1,14 @@
+{
+  "name": "FitPlan - Calorías, recetas y rutinas",
+  "short_name": "FitPlan",
+  "description": "Cuenta calorías, registra comidas y ejercicio, y genera recetas y rutinas.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0f1412",
+  "theme_color": "#6a1bf5",
+  "lang": "es",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
