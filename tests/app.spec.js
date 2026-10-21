@@ -508,6 +508,10 @@ test('Coach: chat con IA (simulada), contexto sin datos personales y coach bási
   await page.click('[data-q=meta]');
   await expect(page.locator('.msg.model').last()).toContainText('Falta activar la IA en Firebase');
   await expect(page.locator('.msg.model').last()).toContainText('Detalle técnico: [403] PERMISSION_DENIED');
+  // App Check exigido sin token: indica cómo desactivarlo
+  await page.evaluate(() => { window.FitSync.ask = async () => { throw new Error('AI: Error fetching [401 ] Firebase App Check token is invalid. (AI/fetch-error)'); }; });
+  await page.click('[data-q=bien]');
+  await expect(page.locator('.msg.model').last()).toContainText('App Check → APIs → Firebase AI Logic');
   const basic = await page.evaluate(() => basicCoach('semana'));
   expect(basic.some(x => x.startsWith('✅')) || basic.some(x => x.startsWith('💡'))).toBe(true);
 });

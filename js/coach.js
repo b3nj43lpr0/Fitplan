@@ -107,6 +107,7 @@ function coachErrorText(e) {
   if (m === 'auth') return 'Para usar el coach con IA, inicia sesión con Google en Perfil → Sincronización (así nadie más puede usarlo).';
   if (m === 'offline' || /network|failed to fetch|load/i.test(m)) return 'No hay conexión con la IA ahora. Te dejo el análisis del coach básico:';
   if (/429|quota|resource.?exhausted|rate/i.test(m)) return 'Se acabó la cuota gratis de la IA por ahora; vuelve a intentar más tarde. Mientras, el coach básico:';
+  if (/app check/i.test(m)) return 'Firebase está exigiendo App Check para la IA. Desactívalo en Firebase → Seguridad → App Check → APIs → Firebase AI Logic → Dejar de aplicar. Mientras, el coach básico:';
   if (/permission|403|not been used|disabled|enable|api-not-enabled|billing/i.test(m)) return 'Falta activar la IA en Firebase (AI Logic → Gemini Developer API). Mientras, el coach básico:';
   return 'La IA no respondió. Te dejo el análisis del coach básico:';
 }
