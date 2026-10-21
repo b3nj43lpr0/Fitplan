@@ -54,7 +54,10 @@ Cada cambio corre `npm test` en GitHub (pruebas de la app en un navegador con ta
 
 ## Archivos
 
-- `index.html`, `styles.css`, `app.js`: la app.
+- `index.html`, `styles.css`: la página y el diseño.
+- `js/`: el código, un archivo por parte (`core.js` con estado, cálculos y navegación; `hoy.js`, `comidas.js`, `actividad.js`, `recetas.js`, `entrenar.js`, `progreso.js`, `perfil.js`; `main.js` arranca la app).
+- `sync.js`, `firebase-config.js`, `firestore.rules`: sincronización con Firebase.
+- `tests/`: pruebas automáticas.
 - `foods.js`: alimentos (USDA SR Legacy, dominio público).
 - `exercises.js`: ejercicios (Exercise data by RepDB, repdb.co). Las imágenes se cargan de internet la primera vez y luego quedan guardadas si la app está instalada.
 - `data.js`: actividades y recetas. Puedes editarlo para agregar más.
