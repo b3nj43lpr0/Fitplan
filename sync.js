@@ -1,18 +1,67 @@
 // Sincronización opcional con Firebase (Auth con Google + Firestore, plan Spark gratuito).
-// Un documento por usuario: users/{uid} = { data: <estado en JSON>, ts: <última modificación> }
+// Los datos se reparten en varios documentos para no chocar con el límite de 1 MB por documento:
+//   users/{uid}/parts/base       → perfil, rutina, plan, alimentos y recetas propias, etc.
+//   users/{uid}/parts/m2026-10   → días y entrenamientos de ese mes
+// Cada documento es { data: <JSON de { unidad: valor }>, ts, dev }. Una "unidad" es un campo base (b:profile),
+// un día (d:2026-10-21) o un entrenamiento (w:id). Se recuerda un hash de lo último sincronizado por unidad,
+// así cada dispositivo sabe qué cambió él y qué cambió el otro, y fusiona por unidad en vez de pisar todo.
+// Si las reglas de Firestore aún no permiten la subcolección, se usa el formato antiguo users/{uid}.
 (function () {
   'use strict';
   const V = '10.12.2';
   const BASE = `https://www.gstatic.com/firebasejs/${V}/`;
   const cfg = window.FIREBASE_CONFIG;
   const listeners = new Set();
-  const S = { enabled: !!cfg, user: null, status: cfg ? 'Sin iniciar sesión' : 'No configurada', busy: false };
-  let fb = null, ref = null, pushTimer = null, applying = false, unsub = null;
+  const S = { enabled: !!cfg, user: null, status: cfg ? 'Sin iniciar sesión' : 'No configurada' };
+  let fb = null, uid = null, legacy = false, pushTimer = null, applying = false, unsubs = [], synced = {};
 
   function emit() { listeners.forEach(f => { try { f(S); } catch (e) { /* ignorar */ } }); }
   function set(patch) { Object.assign(S, patch); emit(); }
   const getState = () => window.__fitplan.get();
   const ts = s => (s && s._ts) || 0;
+  const dev = (() => {
+    try { let d = localStorage.getItem('fitplan-dev'); if (!d) { d = Math.random().toString(36).slice(2); localStorage.setItem('fitplan-dev', d); } return d; } catch (e) { return 'x'; }
+  })();
+
+  // ---------- Unidades ----------
+  function hash(str) {
+    let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+    for (let i = 0; i < str.length; i++) {
+      const c = str.charCodeAt(i);
+      h1 = Math.imul(h1 ^ c, 2654435761); h2 = Math.imul(h2 ^ c, 1597334677);
+    }
+    h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+    h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+    return (h2 >>> 0).toString(36) + (h1 >>> 0).toString(36);
+  }
+  const hv = v => hash(JSON.stringify(v));
+  function units(st) {
+    const u = {};
+    for (const k of Object.keys(st)) if (k !== 'days' && k !== 'workouts' && k !== '_ts') u['b:' + k] = st[k];
+    for (const k of Object.keys(st.days || {})) u['d:' + k] = st.days[k];
+    for (const w of st.workouts || []) u['w:' + w.id] = w;
+    return u;
+  }
+  function docOf(u, v) {
+    if (u[0] === 'b') return 'base';
+    if (u[0] === 'd') return 'm' + u.slice(2, 9);
+    return 'm' + String(v && v.d || '').slice(0, 7);
+  }
+  // Aplica un cambio de una unidad sobre una copia del estado (v undefined = borrar)
+  function applyUnit(st, u, v) {
+    const key = u.slice(2);
+    if (u[0] === 'b') { if (v === undefined) delete st[key]; else st[key] = v; }
+    else if (u[0] === 'd') { st.days = { ...st.days }; if (v === undefined) delete st.days[key]; else st.days[key] = v; }
+    else {
+      st.workouts = (st.workouts || []).filter(w => w.id !== key);
+      if (v !== undefined) st.workouts.push(v);
+      st.workouts.sort((a, b) => (a.d < b.d ? -1 : 1));
+    }
+  }
+  const syncKey = () => 'fitplan-sync2-' + uid;
+  function loadSynced() { try { return JSON.parse(localStorage.getItem(syncKey())); } catch (e) { return null; } }
+  function storeSynced() { try { localStorage.setItem(syncKey(), JSON.stringify(synced)); } catch (e) { /* ignorar */ } }
+  function replaceState(st) { applying = true; try { window.__fitplan.replace(st); } finally { applying = false; } }
 
   // Fusión para el primer inicio de sesión en un dispositivo con datos en ambos lados:
   // lo más reciente manda en los datos sueltos y se unen días, alimentos y registros por id.
@@ -39,53 +88,156 @@
     return out;
   }
 
+  // ---------- Recibir un documento ----------
+  // Por unidad: si este dispositivo no la tocó desde la última sincronización, se adopta la de la nube;
+  // si la tocó, se mantiene la local (se enviará en el próximo push).
+  function receive(docId, payload) {
+    const cur = units(getState());
+    const names = new Set(Object.keys(payload));
+    for (const u of Object.keys(synced)) if (synced[u][1] === docId) names.add(u);
+    for (const u of Object.keys(cur)) if (docOf(u, cur[u]) === docId) names.add(u);
+    let st = null, dirty = false;
+    for (const u of names) {
+      const L = u in cur ? hv(cur[u]) : undefined;
+      const Sh = synced[u] && synced[u][0];
+      const R = u in payload ? hv(payload[u]) : undefined;
+      if (L === Sh) {
+        if (R !== L) { st = st || { ...getState() }; applyUnit(st, u, payload[u]); }
+        if (R === undefined) delete synced[u]; else synced[u] = [R, docId];
+      } else if (R === L) {
+        if (R === undefined) delete synced[u]; else synced[u] = [R, docId];
+      } else dirty = true;
+    }
+    storeSynced();
+    if (st) replaceState(st);
+    return dirty;
+  }
+
+  // ---------- Enviar ----------
+  async function pushDoc(docId, cur) {
+    const ref = fb.doc(fb.db, 'users', uid, 'parts', docId);
+    let final = null;
+    await fb.runTransaction(fb.db, async tx => {
+      const snap = await tx.get(ref);
+      const remote = snap.exists() ? JSON.parse(snap.data().data) : {};
+      const out = { ...remote };
+      const names = new Set();
+      for (const u of Object.keys(synced)) if (synced[u][1] === docId) names.add(u);
+      for (const u of Object.keys(cur)) if (docOf(u, cur[u]) === docId) names.add(u);
+      for (const u of names) {
+        const L = u in cur ? hv(cur[u]) : undefined;
+        if (L === (synced[u] && synced[u][0])) continue; // sin cambios locales: queda lo de la nube
+        if (L === undefined) delete out[u]; else out[u] = cur[u];
+      }
+      tx.set(ref, { data: JSON.stringify(out), ts: Date.now(), dev });
+      final = out;
+    });
+    // Lo enviado ya está sincronizado; lo que la nube tenía distinto se aplica localmente
+    for (const u of Object.keys(final)) if (u in cur && hv(cur[u]) === hv(final[u])) synced[u] = [hv(final[u]), docId];
+    for (const u of Object.keys(synced)) if (synced[u][1] === docId && !(u in final) && !(u in cur)) delete synced[u];
+    receive(docId, final);
+  }
   async function push() {
-    if (!ref || !S.user || applying) return;
+    if (!uid || applying) return;
+    if (legacy) return pushLegacy();
+    const cur = units(getState());
+    const docs = new Set();
+    for (const u of Object.keys(cur)) if (hv(cur[u]) !== (synced[u] && synced[u][0])) docs.add(docOf(u, cur[u]));
+    for (const u of Object.keys(synced)) if (!(u in cur)) docs.add(synced[u][1]);
+    if (!docs.size) { set({ status: 'Sincronizado ✓' }); return; }
     try {
-      await fb.setDoc(ref, { data: JSON.stringify(getState()), ts: ts(getState()) });
+      for (const d of docs) await pushDoc(d, cur);
       set({ status: 'Sincronizado ✓' });
-    } catch (e) { set({ status: 'Sin conexión: se enviará después' }); }
+    } catch (e) {
+      set({ status: 'Sin conexión: se enviará después' });
+      clearTimeout(pushTimer); pushTimer = setTimeout(push, 30000);
+    }
   }
   function schedulePush() {
-    if (!ref || !S.user || applying) return;
+    if (!uid || applying) return;
     set({ status: 'Guardando…' });
     clearTimeout(pushTimer);
     pushTimer = setTimeout(push, 1500);
   }
 
-  function applyRemote(snap) {
-    if (!snap.exists()) { push(); return; }
-    let remote;
-    try { remote = JSON.parse(snap.data().data); } catch (e) { return; }
-    const local = getState();
-    if (ts(remote) === ts(local)) { set({ status: 'Sincronizado ✓' }); return; }
-    if (ts(remote) > ts(local)) {
-      applying = true;
-      window.__fitplan.replace(remote);
-      applying = false;
-      set({ status: 'Sincronizado ✓' });
-    } else {
-      push();
+  // ---------- Inicio de sesión ----------
+  async function start(user) {
+    uid = user.uid;
+    legacy = false;
+    const col = fb.collection(fb.db, 'users', uid, 'parts');
+    let parts;
+    try {
+      parts = await fb.getDocs(col);
+    } catch (e) {
+      if (e && e.code === 'permission-denied') return startLegacy();
+      set({ status: 'Sin conexión' });
+      setTimeout(() => { if (uid === user.uid && !unsubs.length) start(user); }, 30000);
+      return;
     }
+    try {
+      const remoteUnits = {}, where = {};
+      parts.forEach(d => { const p = JSON.parse(d.data().data); for (const u of Object.keys(p)) { remoteUnits[u] = p[u]; where[u] = d.id; } });
+      const stored = loadSynced();
+      if (stored) {
+        synced = stored;
+        parts.forEach(d => receive(d.id, JSON.parse(d.data().data)));
+      } else {
+        // Primera vez en este dispositivo: se fusiona lo local con la nube (o con el formato antiguo)
+        let remote = null;
+        synced = {};
+        if (parts.size) {
+          remote = { days: {}, workouts: [] };
+          for (const u of Object.keys(remoteUnits)) { applyUnit(remote, u, remoteUnits[u]); synced[u] = [hv(remoteUnits[u]), where[u]]; }
+        } else {
+          const old = await fb.getDoc(fb.doc(fb.db, 'users', uid));
+          if (old.exists()) remote = JSON.parse(old.data().data);
+        }
+        const local = getState();
+        const hasLocal = local.profile || Object.keys(local.days || {}).length;
+        if (remote) replaceState(hasLocal ? merge(local, remote) : remote);
+        storeSynced();
+      }
+      await push();
+    } catch (e) { set({ status: 'Error al sincronizar' }); }
+    unsubs.push(fb.onSnapshot(col, snap => {
+      let dirty = false;
+      snap.docChanges().forEach(ch => {
+        if (ch.type === 'removed' || ch.doc.metadata.hasPendingWrites) return;
+        try { dirty = receive(ch.doc.id, JSON.parse(ch.doc.data().data)) || dirty; } catch (e) { /* documento inválido */ }
+      });
+      if (dirty) schedulePush();
+    }, () => set({ status: 'Sin conexión' })));
   }
 
-  async function start(user) {
-    ref = fb.doc(fb.db, 'users', user.uid);
+  // ---------- Formato antiguo (un solo documento), por si las reglas no permiten la subcolección ----------
+  async function pushLegacy() {
+    try {
+      await fb.setDoc(fb.doc(fb.db, 'users', uid), { data: JSON.stringify(getState()), ts: ts(getState()) });
+      set({ status: 'Sincronizado ✓ (actualiza las reglas de Firestore)' });
+    } catch (e) { set({ status: 'Sin conexión: se enviará después' }); }
+  }
+  async function startLegacy() {
+    legacy = true;
+    const ref = fb.doc(fb.db, 'users', uid);
     try {
       const snap = await fb.getDoc(ref);
       if (snap.exists()) {
         const remote = JSON.parse(snap.data().data);
         const local = getState();
         const hasLocal = local.profile || Object.keys(local.days || {}).length;
-        const merged = hasLocal && ts(local) !== ts(remote) && !localStorage.getItem('fitplan-synced-' + user.uid) ? merge(local, remote) : null;
-        applying = true;
-        window.__fitplan.replace(merged || (ts(remote) >= ts(local) ? remote : local));
-        applying = false;
+        const merged = hasLocal && ts(local) !== ts(remote) && !localStorage.getItem('fitplan-synced-' + uid) ? merge(local, remote) : null;
+        replaceState(merged || (ts(remote) >= ts(local) ? remote : local));
       }
-      localStorage.setItem('fitplan-synced-' + user.uid, '1');
-      await push();
+      localStorage.setItem('fitplan-synced-' + uid, '1');
+      await pushLegacy();
     } catch (e) { set({ status: 'Error al sincronizar (revisa las reglas de Firestore)' }); }
-    unsub = fb.onSnapshot(ref, applyRemote, () => set({ status: 'Sin conexión' }));
+    unsubs.push(fb.onSnapshot(ref, snap => {
+      if (!snap.exists() || snap.metadata.hasPendingWrites) return;
+      let remote;
+      try { remote = JSON.parse(snap.data().data); } catch (e) { return; }
+      if (ts(remote) > ts(getState())) replaceState(remote);
+      else if (ts(remote) < ts(getState())) pushLegacy();
+    }, () => set({ status: 'Sin conexión' })));
   }
 
   async function init() {
@@ -96,16 +248,18 @@
       ]);
       const a = app.initializeApp(cfg);
       fb = {
-        auth: auth.getAuth(a), db: fs.getFirestore(a), doc: fs.doc, getDoc: fs.getDoc, setDoc: fs.setDoc, onSnapshot: fs.onSnapshot,
+        auth: auth.getAuth(a), db: fs.getFirestore(a), doc: fs.doc, collection: fs.collection, getDoc: fs.getDoc, getDocs: fs.getDocs,
+        setDoc: fs.setDoc, onSnapshot: fs.onSnapshot, runTransaction: fs.runTransaction,
         GoogleAuthProvider: auth.GoogleAuthProvider, signInWithPopup: auth.signInWithPopup, signOut: auth.signOut,
       };
       auth.onAuthStateChanged(fb.auth, u => {
-        if (unsub) { unsub(); unsub = null; }
+        unsubs.forEach(f => f()); unsubs = [];
         if (u) { set({ user: { name: u.displayName, email: u.email }, status: 'Conectando…' }); start(u); }
-        else { ref = null; set({ user: null, status: 'Sin iniciar sesión' }); }
+        else { uid = null; set({ user: null, status: 'Sin iniciar sesión' }); }
       });
     } catch (e) { set({ status: 'No se pudo cargar (necesita internet)' }); }
   }
+  window.addEventListener('online', () => { if (uid) schedulePush(); });
 
   window.FitSync = {
     state: S,
@@ -117,6 +271,7 @@
       catch (e) { set({ status: 'No se pudo iniciar sesión' }); }
     },
     async signOut() { if (fb) await fb.signOut(fb.auth); },
+    _test: { inject: f => { fb = f; }, start, push, getSynced: () => synced },
   };
   init();
 })();

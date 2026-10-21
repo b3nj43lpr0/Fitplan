@@ -1,8 +1,8 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Cada usuario solo puede leer y escribir su propio documento
-    match /users/{uid} {
+    // Cada usuario solo puede leer y escribir sus propios documentos (y su subcolección de datos por mes)
+    match /users/{uid}/{document=**} {
       allow read, write: if request.auth != null && request.auth.uid == uid;
     }
   }

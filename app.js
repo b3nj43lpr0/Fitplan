@@ -116,7 +116,24 @@ const shuffle = a => a.map(x => [Math.random(), x]).sort((p, q) => p[0] - q[0]).
 function allRecipes() { return [...RECIPES, ...state.customRecipes]; }
 function allFoods() { return [...FOODS, ...state.customFoods]; }
 function foodById(id) { return allFoods().find(f => f.id === id); }
-function exById(id) { return EXERCISE_DB.find(e => e.id === id); }
+// La biblioteca de ejercicios (≈700 KB) se carga solo cuando hace falta
+function exDB() { return typeof EXERCISE_DB !== 'undefined' ? EXERCISE_DB : []; }
+function exReady() { return typeof EXERCISE_DB !== 'undefined'; }
+function loadExercises() {
+  if (exReady()) return Promise.resolve();
+  if (!loadExercises.p) {
+    loadExercises.p = new Promise((ok, fail) => {
+      const sc = document.createElement('script');
+      sc.src = 'exercises.js';
+      sc.onload = ok;
+      sc.onerror = () => { loadExercises.p = null; fail(); };
+      document.head.appendChild(sc);
+    });
+  }
+  return loadExercises.p;
+}
+const EX_VIEWS = ['rutinas', 'progreso'];
+function exById(id) { return exDB().find(e => e.id === id); }
 function ytUrl(q) { return 'https://www.youtube.com/results?search_query=' + encodeURIComponent(q); }
 function toast(msg) {
   const t = $('#toast');
@@ -327,6 +344,14 @@ const tap = () => { if (navigator.vibrate) navigator.vibrate(12); };
 function render() {
   const views = { hoy: viewHoy, comidas: viewComidas, ejercicio: viewEjercicio, recetas: viewRecetas, rutinas: viewRutinas, progreso: viewProgreso, perfil: viewPerfil };
   if (!state.profile && view !== 'perfil') view = 'perfil';
+  if (EX_VIEWS.includes(view) && !exReady()) {
+    $('#main').innerHTML = '<div class="loading"><div class="spinner"></div><p class="muted">Cargando ejercicios…</p></div>';
+    const v = view;
+    loadExercises().then(() => { if (view === v) { render(); animateEnter(); } }).catch(() => {
+      if (view === v) $('#main').innerHTML = '<div class="loading"><p>No pude cargar los ejercicios. Revisa tu conexión.</p><button class="btn" onclick="location.reload()">Reintentar</button></div>';
+    });
+    return;
+  }
   $('#main').innerHTML = views[view]();
   $$('.nav button').forEach(b => b.classList.toggle('active', b.dataset.view === view));
   bind[view] && bind[view]();
@@ -820,13 +845,24 @@ function openScanner() {
           det.detect(video).then(r => { if (r.length) found(r[0].rawValue); }).catch(() => {});
         }, 300);
       }).catch(() => status('No pude abrir la cámara. Revisa los permisos o escribe el código.'));
-    } else if (window.ZXing) {
-      reader = new window.ZXing.BrowserMultiFormatReader();
-      status('Buscando código…');
-      reader.decodeFromConstraints({ video: { facingMode: 'environment' } }, video, res => { if (res) found(res.getText()); })
-        .catch(() => status('No pude abrir la cámara. Revisa los permisos o escribe el código.'));
     } else {
-      status('No pude cargar el lector. Escribe el código a mano.');
+      // Sin lector nativo: cargamos ZXing solo ahora (≈330 KB)
+      status('Cargando lector…');
+      const go = () => {
+        if (stopped) return;
+        reader = new window.ZXing.BrowserMultiFormatReader();
+        status('Buscando código…');
+        reader.decodeFromConstraints({ video: { facingMode: 'environment' } }, video, res => { if (res) found(res.getText()); })
+          .catch(() => status('No pude abrir la cámara. Revisa los permisos o escribe el código.'));
+      };
+      if (window.ZXing) go();
+      else {
+        const sc = document.createElement('script');
+        sc.src = 'vendor/zxing.min.js';
+        sc.onload = go;
+        sc.onerror = () => status('No pude cargar el lector. Escribe el código a mano.');
+        document.head.appendChild(sc);
+      }
     }
   });
 }
@@ -1229,7 +1265,7 @@ const ARM_FOCUS = ['bíceps', 'tríceps'];
 const EQUIP_OPTS = { casa: 'En casa, sin equipo', casa_equipo: 'En casa con mancuernas o bandas', gym: 'Gimnasio' };
 function exPool(equipo, nivel) {
   const lv = { principiante: ['principiante'], intermedio: ['principiante', 'intermedio'], avanzado: ['principiante', 'intermedio', 'avanzado'] }[nivel];
-  return EXERCISE_DB.filter(e => (e.cat === 'fuerza' || (nivel === 'avanzado' && e.cat === 'olímpico'))
+  return exDB().filter(e => (e.cat === 'fuerza' || (nivel === 'avanzado' && e.cat === 'olímpico'))
     && lv.includes(e.lv)
     && (equipo === 'gym' || (equipo === 'casa' ? e.bw : e.home)));
 }
@@ -1269,12 +1305,12 @@ function generateRoutine(opts) {
       return { ex: ex.id, series: scheme.series, reps: hold ? '30-45 s' : isCore ? '12-20' : scheme.reps, rest: scheme.rest };
     }).filter(Boolean);
     if (objetivo === 'perder') {
-      const cardio = shuffle(EXERCISE_DB.filter(e => e.cat === 'cardio' && (equipo === 'gym' || (equipo === 'casa' ? e.bw : e.home))))[0];
+      const cardio = shuffle(exDB().filter(e => e.cat === 'cardio' && (equipo === 'gym' || (equipo === 'casa' ? e.bw : e.home))))[0];
       if (cardio) list.push({ ex: cardio.id, series: nivel === 'principiante' ? 3 : 4, reps: '40 s', rest: '20 s', finisher: true });
     }
     // Un estiramiento al final para los grupos trabajados
     const mainGroups = new Set(groups.map(s => s.split(':')[0]));
-    const stretch = shuffle(EXERCISE_DB.filter(e => e.cat === 'estiramiento' && mainGroups.has(e.g) && e.bw))[0];
+    const stretch = shuffle(exDB().filter(e => e.cat === 'estiramiento' && mainGroups.has(e.g) && e.bw))[0];
     if (stretch) list.push({ ex: stretch.id, series: 1, reps: '30 s por lado', rest: '-', stretch: true });
     return { name, exercises: list, done: false };
   });
@@ -1285,7 +1321,7 @@ function exThumb(e) {
 }
 function viewRutinas() {
   const head = `<h1>Rutinas</h1>
-    <p class="sub">Genera tu rutina semanal o explora ${EXERCISE_DB.length} ejercicios con imágenes y técnica.</p>
+    <p class="sub">Genera tu rutina semanal o explora ${exDB().length} ejercicios con imágenes y técnica.</p>
     ${tabs('rut', ui.rutTab, [['rutina', 'Mi rutina'], ['biblioteca', 'Biblioteca de ejercicios']])}`;
   return head + (ui.rutTab === 'biblioteca' ? viewBiblioteca() : viewMiRutina());
 }
@@ -1328,7 +1364,7 @@ function viewBiblioteca() {
   const groups = ['todos', 'pecho', 'espalda', 'piernas', 'hombros', 'brazos', 'core', 'cuerpo completo'];
   const equips = { todos: 'Cualquier equipo', casa: 'Sin equipo', casa_equipo: 'En casa', gym: 'Solo gimnasio' };
   const q = norm(ui.exQuery.trim());
-  const list = EXERCISE_DB.filter(e =>
+  const list = exDB().filter(e =>
     (ui.exGroup === 'todos' || e.g === ui.exGroup)
     && (ui.exEquip === 'todos' || (ui.exEquip === 'casa' ? e.bw : ui.exEquip === 'casa_equipo' ? e.home : !e.home))
     && (!q || norm(e.n + ' ' + e.m.join(' ') + ' ' + e.eq).includes(q)));
@@ -1371,8 +1407,8 @@ function openExercise(id, slot) {
       const dd = r.days[di];
       const cur = dd.exercises[xi];
       const usedIds = new Set(dd.exercises.map(x => x.ex));
-      let pool = cur.stretch ? EXERCISE_DB.filter(x => x.cat === 'estiramiento' && x.g === e.g && x.bw)
-        : cur.finisher ? EXERCISE_DB.filter(x => x.cat === 'cardio')
+      let pool = cur.stretch ? exDB().filter(x => x.cat === 'estiramiento' && x.g === e.g && x.bw)
+        : cur.finisher ? exDB().filter(x => x.cat === 'cardio')
           : exPool(r.equipo, r.nivel).filter(x => x.g === e.g);
       pool = pool.filter(x => !usedIds.has(x.id));
       const sameMuscle = pool.filter(x => x.m.some(mm => e.m.includes(mm)));
@@ -1460,6 +1496,7 @@ function beep() {
   if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
 }
 function startWorkout(dayIdx) {
+  if (!exReady()) { loadExercises().then(() => startWorkout(dayIdx)); return; }
   let ses = activeSession();
   if (ses && ses.dayIdx !== dayIdx && !confirm('Tienes otro entrenamiento sin terminar. ¿Descartarlo y empezar este?')) return;
   if (!ses || ses.dayIdx !== dayIdx) {

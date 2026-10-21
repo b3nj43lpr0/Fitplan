@@ -30,7 +30,7 @@ Todo es gratuito y no pide tarjeta.
 **2. Sincronizar con Firebase (plan Spark, sin tarjeta)**
 1. Entra a https://console.firebase.google.com y crea un proyecto. No actives ningún plan de pago.
 2. Authentication → Sign-in method → activa **Google**. En Settings → Authorized domains agrega `<tu-usuario>.github.io`.
-3. Firestore Database → Crear base de datos (modo producción) → pestaña Reglas → pega el contenido de `firestore.rules` → Publicar.
+3. Firestore Database → Crear base de datos (modo producción) → pestaña Reglas → pega el contenido de `firestore.rules` → Publicar. Si ya tenías reglas de antes, reemplázalas por las nuevas: ahora los datos se guardan en un documento por mes.
 4. Project settings → Tus apps → Web (`</>`) → copia el bloque `firebaseConfig` y pégalo en `firebase-config.js`.
 5. Sube el cambio. En Perfil → Sincronización, inicia sesión con Google en cada dispositivo.
 
