@@ -433,3 +433,33 @@ a.btn { display: inline-block; text-decoration: none; }
 .wk-info summary { cursor: pointer; color: var(--accent); font-weight: 600; }
 textarea { width: 100%; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--soft); color: var(--text); font: inherit; resize: vertical; }
 textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; background: var(--card); }
+
+/* ---------- Rachas, resumen y logros ---------- */
+.streak { border: 0; background: linear-gradient(135deg, #ff8a1f, #ff4d1f); color: #fff; font-weight: 800; font-size: 15px; padding: 8px 12px; border-radius: 99px; cursor: pointer; box-shadow: 0 4px 14px rgba(255,106,31,.35); animation: pulse 2.4s ease-in-out infinite; }
+@keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.06); } }
+.chart.stacked { position: relative; height: 170px; }
+.chart.stacked .stack { width: 100%; max-width: 28px; height: 100%; display: flex; flex-direction: column-reverse; border-radius: 8px; overflow: hidden; }
+.chart.stacked .stack i { display: block; width: 100%; transition: height .4s; }
+.chart.stacked .stack i:last-child { border-radius: 8px 8px 0 0; }
+.chart.stacked.dense { gap: 3px; }
+.chart.stacked.dense .goal-line { bottom: calc((100% - 10px) * var(--g)); }
+.chart.stacked .goal-line { position: absolute; left: 0; right: 0; bottom: calc(20px + (100% - 30px) * var(--g)); border-top: 2px dashed var(--accent); opacity: .7; pointer-events: none; }
+.chart.stacked .col { justify-content: flex-end; }
+.chart.stacked:not(.dense) .stack { height: calc(100% - 20px); }
+.chart.stacked .col { gap: 0; }
+.chart.stacked .lbl { height: 20px; line-height: 20px; }
+.badges { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; margin-top: 12px; }
+.badge { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 3px; padding: 12px 8px; border-radius: 14px; background: var(--soft); opacity: .55; transition: transform .2s; }
+.badge.on { opacity: 1; background: var(--accent-soft); }
+.badge.on:hover { transform: translateY(-3px); }
+.badge .bi { font-size: 28px; }
+.badge b { font-size: 13px; }
+.badge .muted { font-size: 11px; line-height: 1.3; }
+.photos { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
+.ph { border: 3px solid transparent; padding: 0; border-radius: 12px; overflow: hidden; background: var(--soft); cursor: pointer; position: relative; aspect-ratio: 3 / 4; }
+.ph img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ph span { position: absolute; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,.55); color: #fff; font-size: 11px; padding: 3px; }
+.ph.sel { border-color: var(--accent); }
+.cmp { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.cmp img { width: 100%; border-radius: 12px; }
+.cmp figure { margin: 0; text-align: center; font-size: 12px; color: var(--muted); }

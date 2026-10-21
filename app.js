@@ -26,7 +26,7 @@ const DIETS = {
   lowcarb: { label: 'Baja en carbohidratos', fatPct: 0.45 },
   vegetariana: { label: 'Vegetariana', fatPct: 0.25 },
 };
-const EMPTY = () => ({ profile: null, days: {}, customFoods: [], routine: null, weights: [], measures: [], plan: null, ajuste: 0, lastAdjust: null, favFoods: [], workouts: [], customRecipes: [] });
+const EMPTY = () => ({ profile: null, days: {}, customFoods: [], routine: null, weights: [], measures: [], plan: null, ajuste: 0, lastAdjust: null, favFoods: [], workouts: [], customRecipes: [], badges: [] });
 
 let state = load();
 let view = state.profile ? 'hoy' : 'perfil';
@@ -34,7 +34,7 @@ let currentDate = todayKey();
 let ui = {
   foodQuery: '', foodCat: 'Todas', selFood: null, meal: guessMeal(),
   recipeTab: 'recetas', recipeType: 'todas', recipeTag: 'todas', suggest: null,
-  rutTab: 'rutina', exQuery: '', exGroup: 'todos', exEquip: 'todos',
+  rutTab: 'rutina', exQuery: '', exGroup: 'todos', exEquip: 'todos', sumRange: 7, cmp: [],
 };
 
 function load() {
@@ -46,6 +46,7 @@ function load() {
 }
 function save() {
   state._ts = Date.now();
+  checkBadges();
   persist();
   if (window.FitSync) window.FitSync.notify();
 }
@@ -129,6 +130,58 @@ function closeModal() {
   document.body.style.overflow = '';
 }
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+// ---------- Rachas y logros ----------
+const logged = k => { const d = state.days[k]; return !!(d && d.foods.length); };
+// Días seguidos registrando comidas (si hoy aún no registras, cuenta desde ayer)
+function streak() {
+  let k = todayKey();
+  if (!logged(k)) k = shiftKey(k, -1);
+  let n = 0;
+  while (logged(k)) { n++; k = shiftKey(k, -1); }
+  return n;
+}
+function bestStreak() {
+  const ks = Object.keys(state.days).filter(logged).sort();
+  let best = 0, cur = 0, prev = null;
+  for (const k of ks) { cur = prev && daysBetween(prev, k) === 1 ? cur + 1 : 1; best = Math.max(best, cur); prev = k; }
+  return best;
+}
+function dayInGoal(k, tg) {
+  const d = state.days[k];
+  if (!d || !d.foods.length) return false;
+  const t = totals(d);
+  return t.kcal <= tg.kcal + t.burned && t.kcal >= (tg.kcal + t.burned) * 0.7;
+}
+const BADGES = [
+  { id: 'inicio', ico: '🌱', name: 'Primer paso', desc: 'Registra tu primera comida', test: () => Object.keys(state.days).some(logged) },
+  { id: 'racha3', ico: '🔥', name: 'En racha', desc: '3 días seguidos registrando', test: () => bestStreak() >= 3 },
+  { id: 'racha7', ico: '⚡', name: 'Semana perfecta', desc: '7 días seguidos registrando', test: () => bestStreak() >= 7 },
+  { id: 'racha30', ico: '👑', name: 'Imparable', desc: '30 días seguidos registrando', test: () => bestStreak() >= 30 },
+  { id: 'meta7', ico: '🎯', name: 'En la meta', desc: '7 días dentro de tu meta de calorías', test: () => { const tg = calcTargets(); return Object.keys(state.days).filter(k => dayInGoal(k, tg)).length >= 7; } },
+  { id: 'agua7', ico: '💧', name: 'Bien hidratado', desc: '7 días cumpliendo tu meta de agua', test: () => { const w = calcTargets().water; return Object.values(state.days).filter(d => d.water >= w).length >= 7; } },
+  { id: 'entreno1', ico: '💪', name: 'Primer entrenamiento', desc: 'Completa un entrenamiento en modo entrenamiento', test: () => state.workouts.length >= 1 },
+  { id: 'entreno10', ico: '🏋️', name: 'Constante', desc: '10 entrenamientos completados', test: () => state.workouts.length >= 10 },
+  { id: 'entreno50', ico: '🦾', name: 'Bestia', desc: '50 entrenamientos completados', test: () => state.workouts.length >= 50 },
+  { id: 'activo20', ico: '🏃', name: 'Activo', desc: '20 días con ejercicio registrado', test: () => Object.values(state.days).filter(d => d.exercises.length).length >= 20 },
+  { id: 'record', ico: '🏆', name: 'Récord personal', desc: 'Supera tu mejor marca en un ejercicio', test: () => strengthStats().some(x => x.pts.length >= 2 && Math.max(...x.pts.slice(1).map(q => q.v)) > x.pts[0].v) },
+  { id: 'pesaje10', ico: '⚖️', name: 'Bajo control', desc: 'Registra tu peso 10 veces', test: () => state.weights.length >= 10 },
+  { id: 'cambio2', ico: '📉', name: 'Resultados', desc: 'Avanza 2 kg hacia tu objetivo', test: () => {
+    const ws = [...state.weights].sort((a, b) => a.d.localeCompare(b.d));
+    if (ws.length < 2 || !state.profile) return false;
+    const ch = ws[ws.length - 1].kg - ws[0].kg, obj = state.profile.objetivo;
+    return obj === 'perder' ? ch <= -2 : obj === 'ganar' ? ch >= 2 : false;
+  } },
+  { id: 'chef', ico: '👩‍🍳', name: 'Chef', desc: 'Crea tu primera receta', test: () => state.customRecipes.length >= 1 },
+  { id: 'plan', ico: '🗓️', name: 'Organizado', desc: 'Genera un plan semanal de comidas', test: () => !!state.plan },
+];
+function checkBadges() {
+  if (!state.profile) return;
+  const fresh = BADGES.filter(b => !state.badges.includes(b.id) && b.test());
+  if (!fresh.length) return;
+  state.badges = [...state.badges, ...fresh.map(b => b.id)];
+  setTimeout(() => toast(`🏅 Logro desbloqueado: ${fresh[0].name}${fresh.length > 1 ? ` y ${fresh.length - 1} más` : ''}`), 2500);
+}
 
 // ---------- Cálculos ----------
 function currentWeight() {
@@ -358,6 +411,7 @@ function viewHoy() {
     <div class="hello">
       <div class="avatar" aria-hidden="true">${esc((state.profile.nombre || 'T').trim().charAt(0).toUpperCase())}</div>
       <div class="who"><div class="greet">${greeting()} 👋</div><div class="name">${esc(state.profile.nombre || 'Hola')}</div></div>
+      ${streak() ? `<button class="streak" data-go="progreso" title="Días seguidos registrando">🔥 ${streak()}</button>` : ''}
       <button class="round-btn" data-go="perfil" aria-label="Perfil">⚙️</button>
     </div>
     ${dateBar()}
@@ -1528,6 +1582,118 @@ function strengthCard() {
     : '<p class="muted">Usa <b>▶ Empezar entrenamiento</b> en Rutinas y registra el peso de cada serie. Aquí verás tus récords y cómo vas subiendo.</p>'}
   </div>`;
 }
+function summaryCard() {
+  const N = ui.sumRange;
+  const tg = calcTargets();
+  const keys = Array.from({ length: N }, (_, i) => shiftKey(todayKey(), i - N + 1));
+  const ds = keys.map(k => ({ k, d: peekDay(k), t: totals(peekDay(k)) }));
+  const lg = ds.filter(x => x.d.foods.length);
+  const avg = f => lg.length ? lg.reduce((a, x) => a + f(x), 0) / lg.length : 0;
+  const inGoal = keys.filter(k => dayInGoal(k, tg)).length;
+  const exMin = ds.reduce((a, x) => a + x.d.exercises.reduce((b, e) => b + (e.minutes || 0), 0), 0);
+  const burned = ds.reduce((a, x) => a + x.t.burned, 0);
+  const wks = state.workouts.filter(w => w.d >= keys[0]).length;
+  const ws = state.weights.filter(w => w.d >= keys[0]).sort((a, b) => a.d.localeCompare(b.d));
+  const wch = ws.length >= 2 ? ws[ws.length - 1].kg - ws[0].kg : null;
+  // Barras apiladas: calorías de proteína, carbohidratos y grasa por día
+  const maxK = Math.max(tg.kcal * 1.2, ...ds.map(x => x.t.p * 4 + x.t.c * 4 + x.t.g * 9));
+  const bars = ds.map(x => {
+    const h = v => (v / maxK) * 100;
+    return `<div class="col" title="${shortDate(x.k)}: ${r0(x.t.kcal)} kcal">
+      <div class="stack">${x.d.foods.length ? `<i style="height:${h(x.t.g * 9)}%;background:var(--fat)"></i><i style="height:${h(x.t.c * 4)}%;background:var(--carb)"></i><i style="height:${h(x.t.p * 4)}%;background:var(--prot)"></i>` : ''}</div>
+      ${N <= 7 ? `<span class="lbl">${parseKey(x.k).toLocaleDateString('es', { weekday: 'short' }).slice(0, 3)}</span>` : ''}
+    </div>`;
+  }).join('');
+  return `<div class="card">
+    <div class="row"><h2 style="margin:0">Resumen</h2>${tabs('sum', String(N), [['7', '7 días'], ['30', '30 días']])}</div>
+    <div class="grid g4" style="gap:10px;margin:12px 0">
+      ${tile('Promedio diario', r0(avg(x => x.t.kcal)), `/ ${r0(tg.kcal)} kcal`, '🍽️')}
+      ${tile('Proteína promedio', r0(avg(x => x.t.p)), `/ ${r0(tg.prot)} g`, '🥩')}
+      ${tile('Días en la meta', inGoal, `/ ${N}`, '🎯', 'accent')}
+      ${tile('Días registrados', lg.length, `/ ${N}`, '📝')}
+      ${tile('Ejercicio', exMin, 'min', '⏱️', 'burn')}
+      ${tile('Quemadas', r0(burned), 'kcal', '🔥', 'burn')}
+      ${tile('Entrenamientos', wks, '', '🏋️')}
+      ${tile('Cambio de peso', wch === null ? '—' : (wch > 0 ? '+' : '') + r1(wch), 'kg', '⚖️')}
+    </div>
+    <div class="chart stacked ${N > 7 ? 'dense' : ''}" style="--g:${tg.kcal / maxK}">${bars}<span class="goal-line" title="Tu meta"></span></div>
+    <div class="legend"><span><i style="background:var(--prot)"></i>Proteína</span><span><i style="background:var(--carb)"></i>Carbohidratos</span><span><i style="background:var(--fat)"></i>Grasas</span><span><i style="background:var(--accent)"></i>Meta</span></div>
+  </div>`;
+}
+function badgesCard() {
+  const got = BADGES.filter(b => state.badges.includes(b.id));
+  return `<div class="card">
+    <div class="row"><h2 style="margin:0">Logros</h2><span class="muted small">${got.length} de ${BADGES.length} · racha actual ${streak()} ${streak() === 1 ? 'día' : 'días'} · mejor ${bestStreak()}</span></div>
+    <div class="badges">${BADGES.map(b => { const on = state.badges.includes(b.id); return `<div class="badge ${on ? 'on' : ''}" title="${esc(b.desc)}"><span class="bi">${on ? b.ico : '🔒'}</span><b>${esc(b.name)}</b><span class="muted small">${esc(b.desc)}</span></div>`; }).join('')}</div>
+  </div>`;
+}
+// ---------- Fotos de progreso (IndexedDB, solo en este dispositivo) ----------
+function photoDb() {
+  return new Promise((ok, fail) => {
+    const rq = indexedDB.open('fitplan-photos', 1);
+    rq.onupgradeneeded = () => rq.result.createObjectStore('photos', { keyPath: 'id' });
+    rq.onsuccess = () => ok(rq.result);
+    rq.onerror = () => fail(rq.error);
+  });
+}
+async function photoOp(mode, fn) {
+  const db = await photoDb();
+  return new Promise((ok, fail) => {
+    const tx = db.transaction('photos', mode);
+    const r = fn(tx.objectStore('photos'));
+    tx.oncomplete = () => ok(r && r.result);
+    tx.onerror = () => fail(tx.error);
+  });
+}
+const listPhotos = () => photoOp('readonly', st => st.getAll()).then(l => (l || []).sort((a, b) => a.d.localeCompare(b.d)));
+function shrinkImage(file, max = 900) {
+  return new Promise((ok, fail) => {
+    const img = new Image();
+    img.onload = () => {
+      const k = Math.min(1, max / Math.max(img.width, img.height));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(img.src);
+      ok(c.toDataURL('image/jpeg', 0.8));
+    };
+    img.onerror = fail;
+    img.src = URL.createObjectURL(file);
+  });
+}
+function photosCard() {
+  return `<div class="card">
+    <div class="row"><h2 style="margin:0">Fotos de progreso</h2>
+      <label class="btn sm" style="margin:0">📷 Agregar<input type="file" id="photoIn" accept="image/*" hidden></label></div>
+    <p class="muted small">Se guardan solo en este dispositivo (no se suben a internet). Toca dos fotos para compararlas.</p>
+    <div class="photos" id="photos"><div class="empty">Cargando…</div></div>
+  </div>`;
+}
+async function paintPhotos() {
+  const box = $('#photos');
+  if (!box) return;
+  let list = [];
+  try { list = await listPhotos(); } catch (e) { box.innerHTML = '<div class="empty">Este navegador no permite guardar fotos.</div>'; return; }
+  box.innerHTML = list.length ? list.map(ph => `<button class="ph ${ui.cmp.includes(ph.id) ? 'sel' : ''}" data-ph="${ph.id}"><img src="${ph.src}" alt="Foto del ${shortDate(ph.d)}"><span>${shortDate(ph.d)}</span></button>`).join('')
+    : '<div class="empty">Aún no tienes fotos. Una foto cada 2-4 semanas, con la misma luz y pose, muestra cambios que la balanza no ve.</div>';
+  box.querySelectorAll('[data-ph]').forEach(b => b.addEventListener('click', () => {
+    const id = b.dataset.ph;
+    ui.cmp = ui.cmp.includes(id) ? ui.cmp.filter(x => x !== id) : [...ui.cmp, id].slice(-2);
+    if (ui.cmp.length === 2) {
+      const [a, c] = ui.cmp.map(x => list.find(ph => ph.id === x)).sort((p1, p2) => p1.d.localeCompare(p2.d));
+      openModal(`<h2>Antes y después</h2><div class="cmp"><figure><img src="${a.src}" alt=""><figcaption>${shortDate(a.d)}</figcaption></figure><figure><img src="${c.src}" alt=""><figcaption>${shortDate(c.d)} · ${daysBetween(a.d, c.d)} días después</figcaption></figure></div>
+        <div class="btn-row"><button class="btn ghost sm" data-phdel="${a.id}" style="color:var(--danger)">Borrar foto del ${shortDate(a.d)}</button><button class="btn ghost sm" data-phdel="${c.id}" style="color:var(--danger)">Borrar foto del ${shortDate(c.d)}</button></div>`, m => {
+        m.querySelectorAll('[data-phdel]').forEach(x => x.addEventListener('click', async () => {
+          if (!confirm('¿Borrar esta foto?')) return;
+          await photoOp('readwrite', st => st.delete(x.dataset.phdel));
+          ui.cmp = []; closeModal(); paintPhotos();
+        }));
+      });
+      ui.cmp = [];
+    }
+    paintPhotos();
+  }));
+}
 function viewProgreso() {
   const p = state.profile;
   const tg = calcTargets();
@@ -1587,9 +1753,23 @@ function viewProgreso() {
         ${ms.slice(-6).reverse().map(m => { const b = bodyFat(m, p); return `<tr><td>${shortDate(m.d)}</td><td>${m.cintura || '—'}</td><td>${m.cuello || '—'}</td><td>${m.cadera || '—'}</td><td>${m.brazo || '—'}</td><td>${b ? r1(b) + '%' : '—'}</td></tr>`; }).join('')}
       </tbody></table>` : ''}
     </div>
-    ${strengthCard()}`;
+    ${strengthCard()}
+    ${summaryCard()}
+    <div class="grid g2">${badgesCard()}${photosCard()}</div>`;
 }
 bind.progreso = () => {
+  $$('[data-tab-sum]').forEach(b => b.addEventListener('click', () => { ui.sumRange = Number(b.dataset.tabSum); render(); }));
+  paintPhotos();
+  $('#photoIn').addEventListener('change', async e => {
+    const f = e.target.files[0];
+    e.target.value = '';
+    if (!f) return;
+    try {
+      const src = await shrinkImage(f);
+      await photoOp('readwrite', st => st.put({ id: uid(), d: todayKey(), src }));
+      toast('Foto guardada 📸'); paintPhotos();
+    } catch (err) { toast('No pude guardar la foto'); }
+  });
   $$('[data-strength]').forEach(el => {
     const open = () => {
       const x = strengthStats().find(z => z.id === el.dataset.strength);
