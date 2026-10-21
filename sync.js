@@ -31,6 +31,7 @@
     out.customFoods = uniq(older.customFoods, newer.customFoods, i => i.id || i.name);
     out.weights = uniq(older.weights, newer.weights, i => i.d).sort((m, n) => (m.d < n.d ? -1 : 1));
     out.measures = uniq(older.measures, newer.measures, i => JSON.stringify(i));
+    out.customRecipes = uniq(older.customRecipes, newer.customRecipes, i => i.id);
     out.favFoods = [...new Set([...(older.favFoods || []), ...(newer.favFoods || [])])];
     out.workouts = uniq(older.workouts, newer.workouts, i => i.id).sort((m, n) => (m.d < n.d ? -1 : 1));
     out._ts = Date.now();

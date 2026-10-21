@@ -26,7 +26,7 @@ const DIETS = {
   lowcarb: { label: 'Baja en carbohidratos', fatPct: 0.45 },
   vegetariana: { label: 'Vegetariana', fatPct: 0.25 },
 };
-const EMPTY = () => ({ profile: null, days: {}, customFoods: [], routine: null, weights: [], measures: [], plan: null, ajuste: 0, lastAdjust: null, favFoods: [], workouts: [] });
+const EMPTY = () => ({ profile: null, days: {}, customFoods: [], routine: null, weights: [], measures: [], plan: null, ajuste: 0, lastAdjust: null, favFoods: [], workouts: [], customRecipes: [] });
 
 let state = load();
 let view = state.profile ? 'hoy' : 'perfil';
@@ -92,6 +92,7 @@ const norm = s => String(s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '
 const $ = sel => document.querySelector(sel);
 const $$ = sel => document.querySelectorAll(sel);
 const shuffle = a => a.map(x => [Math.random(), x]).sort((p, q) => p[0] - q[0]).map(x => x[1]);
+function allRecipes() { return [...RECIPES, ...state.customRecipes]; }
 function allFoods() { return [...FOODS, ...state.customFoods]; }
 function foodById(id) { return allFoods().find(f => f.id === id); }
 function exById(id) { return EXERCISE_DB.find(e => e.id === id); }
@@ -273,7 +274,7 @@ function greeting() {
   return h < 12 ? 'Buenos días' : h < 20 ? 'Buenas tardes' : 'Buenas noches';
 }
 const MEAL_ICO = { desayuno: '🍳', almuerzo: '🍲', cena: '🥗', snack: '🍎' };
-const ACT_ICO = { caminar: '🚶', caminarrapido: '🚶‍♂️', trotar: '🏃', correr: '🏃‍♂️', correrrapido: '⚡', bici: '🚴', biciestatica: '🚲', pesas: '🏋️', pesasintenso: '💪', hiit: '🔥', natacion: '🏊', futbol: '⚽', basket: '🏀', tenis: '🎾', yoga: '🧘', pilates: '🤸', baile: '💃', eliptica: '🦿', cuerda: '🪢', escaleras: '🪜', boxeo: '🥊', casa: '🧹' };
+const ACT_ICO = { caminar: '🚶', caminarrapido: '🚶‍♂️', trotar: '🏃', correr: '🏃‍♂️', correrrapido: '⚡', bici: '🚴', biciestatica: '🚲', pesas: '🏋️', pesasintenso: '💪', hiit: '🔥', natacion: '🏊', futbol: '⚽', basket: '🏀', tenis: '🎾', yoga: '🧘', pilates: '🤸', baile: '💃', eliptica: '🦿', cuerda: '🪢', escaleras: '🪜', boxeo: '🥊', casa: '🧹', trekking: '🥾', spinning: '🚴‍♀️', crossfit: '🏋️‍♀️', calistenia: '🤸‍♂️', remo: '🚣', stepper: '🪜', aerobicos: '🕺', nadarintenso: '🏊‍♂️', voleibol: '🏐', escalada: '🧗', artesmarciales: '🥋', patinar: '⛸️', skate: '🛹', surf: '🏄', kayak: '🛶', golf: '⛳', cueca: '💃', estirar: '🧘‍♂️', perro: '🐕', jardin: '🌱', mudanza: '📦', bicicletaurbana: '🚲' };
 const bind = {};
 
 // ---------- Vista: Hoy ----------
@@ -347,7 +348,7 @@ function viewHoy() {
   const planDay = state.plan ? state.plan.days.find(x => x.date === currentDate) : null;
   const planHtml = planDay ? MEALS.map(m => {
     const pm = planDay.meals[m.id];
-    const r = pm && RECIPES.find(x => x.id === pm.id);
+    const r = pm && allRecipes().find(x => x.id === pm.id);
     return r ? `<div class="item"><div class="info"><div class="muted small">${m.name}</div><div class="name">${esc(r.name)}</div></div>
       <span class="kcal">${r0(recipeNutrition(r, pm.f).kcal)}</span>
       <button class="btn ghost sm" data-log-recipe="${r.id}" data-factor="${pm.f}" data-meal="${m.id}">+ Agregar</button></div>` : '';
@@ -833,7 +834,7 @@ function scaleFactor(recipe, target) {
 }
 function recipesFor(mealId) {
   const veg = state.profile.dieta === 'vegetariana';
-  return RECIPES.filter(r => (r.tipo === mealId || (mealId === 'cena' && r.tipo === 'almuerzo') || (mealId === 'almuerzo' && r.tipo === 'cena'))
+  return allRecipes().filter(r => (r.tipo === mealId || (mealId === 'cena' && r.tipo === 'almuerzo') || (mealId === 'almuerzo' && r.tipo === 'cena'))
     && (!veg || r.tags.includes('vegetariana')));
 }
 function recipeScore(r, target) {
@@ -857,13 +858,13 @@ function recipeCard(rec, factor = 1, note = '') {
     </details>
     <div class="btn-row">
       <button class="btn sm" data-log-recipe="${rec.id}" data-factor="${factor}">Agregar a hoy</button>
-      <a class="btn ghost sm" href="${ytUrl('receta ' + rec.name)}" target="_blank" rel="noopener">▶ Ver video</a>
+      ${rec.custom ? `<button class="btn ghost sm" data-edit-recipe="${rec.id}">✏️ Editar</button>` : `<a class="btn ghost sm" href="${ytUrl('receta ' + rec.name)}" target="_blank" rel="noopener">▶ Ver video</a>`}
     </div>
   </div>`;
 }
 function bindLogRecipe(dateKey = todayKey()) {
   $$('[data-log-recipe]').forEach(b => b.addEventListener('click', () => {
-    const rec = RECIPES.find(r => r.id === b.dataset.logRecipe);
+    const rec = allRecipes().find(r => r.id === b.dataset.logRecipe);
     const factor = Number(b.dataset.factor);
     const n = recipeNutrition(rec, factor);
     const grams = rec.ing.reduce((a, [, g]) => a + g * factor, 0);
@@ -873,18 +874,81 @@ function bindLogRecipe(dateKey = todayKey()) {
     if (view === 'hoy') render();
   }));
 }
+// Crear o editar una receta propia: busca ingredientes y calcula las calorías al instante
+function recipeEditor(id) {
+  const old = id && state.customRecipes.find(r => r.id === id);
+  const draft = old ? JSON.parse(JSON.stringify(old)) : { name: '', tipo: 'almuerzo', tags: [], ing: [], pasos: [] };
+  const TAGS = ['alta-proteina', 'vegetariana', 'rapida', 'economica'];
+  openModal(`
+    <h2>${old ? 'Editar receta' : 'Nueva receta'}</h2>
+    <div class="field"><label for="rcName">Nombre</label><input id="rcName" value="${esc(draft.name)}" placeholder="Ej: Pollo al jugo de la abuela"></div>
+    <div class="field"><label for="rcTipo">Tipo de comida</label><select id="rcTipo">${MEALS.map(m => `<option value="${m.id}" ${m.id === draft.tipo ? 'selected' : ''}>${m.name}</option>`).join('')}</select></div>
+    <div class="chips">${TAGS.map(t => `<button class="chip ${draft.tags.includes(t) ? 'active' : ''}" data-rctag="${t}">${t.replace('-', ' ')}</button>`).join('')}</div>
+    <h3>Ingredientes <span class="muted small" id="rcTot"></span></h3>
+    <div class="list" id="rcIng"></div>
+    <div class="field" style="position:relative"><input id="rcSearch" type="search" placeholder="Buscar ingrediente para agregar…" autocomplete="off"><div class="list" id="rcRes"></div></div>
+    <div class="field"><label for="rcPasos">Preparación (un paso por línea)</label><textarea id="rcPasos" rows="4">${esc(draft.pasos.join('\n'))}</textarea></div>
+    <div class="btn-row"><button class="btn" id="rcSave">Guardar receta</button>${old ? '<button class="btn ghost" id="rcDel" style="color:var(--danger)">Eliminar</button>' : ''}</div>`, m => {
+    const q = sel => m.querySelector(sel);
+    const paintIng = () => {
+      const n = recipeNutrition(draft);
+      q('#rcTot').textContent = draft.ing.length ? `· ${r0(n.kcal)} kcal · P ${r0(n.p)} · C ${r0(n.c)} · G ${r0(n.g)}` : '';
+      q('#rcIng').innerHTML = draft.ing.map(([fid, g], k) => {
+        const f = foodById(fid);
+        return f ? `<div class="item"><div class="info"><div class="name">${esc(f.name)}</div><div class="muted small">${r0(f.kcal * g / 100)} kcal</div></div>
+          <input type="number" min="1" inputmode="decimal" value="${g}" data-ig="${k}" style="width:84px;text-align:center"> <span class="muted small">g</span>
+          <button class="icon-btn" data-idel="${k}" aria-label="Quitar">✕</button></div>` : '';
+      }).join('') || '<div class="empty">Agrega ingredientes con el buscador.</div>';
+      m.querySelectorAll('[data-ig]').forEach(inp => inp.addEventListener('change', () => { draft.ing[inp.dataset.ig][1] = Math.max(1, Number(inp.value) || 1); paintIng(); }));
+      m.querySelectorAll('[data-idel]').forEach(b => b.addEventListener('click', () => { draft.ing.splice(Number(b.dataset.idel), 1); paintIng(); }));
+    };
+    paintIng();
+    q('#rcSearch').addEventListener('input', () => {
+      const t = norm(q('#rcSearch').value.trim());
+      const res = t.length < 2 ? [] : allFoods().filter(f => norm(f.name).includes(t)).slice(0, 8);
+      q('#rcRes').innerHTML = res.map(f => `<div class="item tappable" data-pick="${f.id}"><div class="info"><div class="name">${esc(f.name)}</div><div class="muted small">${r0(f.kcal)} kcal / 100 g</div></div><span class="quick-add">＋</span></div>`).join('');
+      m.querySelectorAll('[data-pick]').forEach(el => el.addEventListener('click', () => {
+        const f = foodById(el.dataset.pick);
+        draft.ing.push([f.id, f.por || 100]);
+        q('#rcSearch').value = ''; q('#rcRes').innerHTML = '';
+        paintIng();
+      }));
+    });
+    m.querySelectorAll('[data-rctag]').forEach(b => b.addEventListener('click', () => {
+      const t = b.dataset.rctag;
+      draft.tags = draft.tags.includes(t) ? draft.tags.filter(x => x !== t) : [...draft.tags, t];
+      b.classList.toggle('active');
+    }));
+    q('#rcSave').addEventListener('click', () => {
+      draft.name = q('#rcName').value.trim();
+      draft.tipo = q('#rcTipo').value;
+      draft.pasos = q('#rcPasos').value.split('\n').map(x => x.trim()).filter(Boolean);
+      if (!draft.name) return toast('Ponle un nombre a la receta');
+      if (!draft.ing.length) return toast('Agrega al menos un ingrediente');
+      if (old) Object.assign(old, draft);
+      else state.customRecipes.push({ ...draft, id: 'u_' + uid(), custom: true });
+      save(); closeModal(); ui.recipeTag = 'mias'; ui.recipeType = 'todas'; render(); toast('Receta guardada 👩‍🍳');
+    });
+    const del = q('#rcDel');
+    if (del) del.addEventListener('click', () => {
+      if (!confirm('¿Eliminar esta receta?')) return;
+      state.customRecipes = state.customRecipes.filter(r => r.id !== id);
+      save(); closeModal(); render();
+    });
+  });
+}
 function viewRecetas() {
   const head = `<h1>Recetas</h1>
-    <p class="sub">${RECIPES.length} recetas con calorías calculadas, un plan semanal y tu lista de compras.</p>
+    <p class="sub">${allRecipes().length} recetas con calorías calculadas, un plan semanal y tu lista de compras.</p>
     ${tabs('rec', ui.recipeTab, [['recetas', 'Qué comer'], ['plan', 'Plan semanal'], ['compras', 'Lista de compras']])}`;
   if (ui.recipeTab === 'plan') return head + viewPlan();
   if (ui.recipeTab === 'compras') return head + viewCompras();
 
   const { meal, target, left } = nextMealTarget();
   const tipos = ['todas', 'desayuno', 'almuerzo', 'cena', 'snack'];
-  const tags = ['todas', 'alta-proteina', 'vegetariana', 'rapida', 'economica'];
-  const list = RECIPES.filter(r => (ui.recipeType === 'todas' || r.tipo === ui.recipeType) && (ui.recipeTag === 'todas' || r.tags.includes(ui.recipeTag)));
-  const sugg = (ui.suggest || []).map(id => RECIPES.find(r => r.id === id)).filter(Boolean);
+  const tags = ['todas', 'mias', 'alta-proteina', 'vegetariana', 'rapida', 'economica'];
+  const list = allRecipes().filter(r => (ui.recipeType === 'todas' || r.tipo === ui.recipeType) && (ui.recipeTag === 'todas' || (ui.recipeTag === 'mias' ? r.custom : r.tags.includes(ui.recipeTag))));
+  const sugg = (ui.suggest || []).map(id => allRecipes().find(r => r.id === id)).filter(Boolean);
   return head + `
     <div class="card" style="border-color:var(--accent)">
       <div class="row" style="flex-wrap:wrap">
@@ -896,9 +960,9 @@ function viewRecetas() {
       </div>
     </div>
     ${sugg.length ? `<h2>Sugerencias para ti</h2><div class="grid g3">${sugg.map(r => recipeCard(r, scaleFactor(r, left > 0 ? target : 200), 'Porción ajustada a tus calorías restantes.')).join('')}</div>` : ''}
-    <h2 style="margin-top:8px">Todas las recetas</h2>
+    <div class="row" style="margin-top:8px"><h2 style="margin:0">Todas las recetas</h2><button class="btn sm" id="newRecipe">＋ Crear receta</button></div>
     <div class="chips">${tipos.map(t => `<button class="chip ${t === ui.recipeType ? 'active' : ''}" data-rtype="${t}">${t === 'todas' ? 'Todas' : t[0].toUpperCase() + t.slice(1)}</button>`).join('')}</div>
-    <div class="chips">${tags.map(t => `<button class="chip ${t === ui.recipeTag ? 'active' : ''}" data-rtag="${t}">${t === 'todas' ? 'Cualquiera' : t.replace('-', ' ')}</button>`).join('')}</div>
+    <div class="chips">${tags.map(t => `<button class="chip ${t === ui.recipeTag ? 'active' : ''}" data-rtag="${t}">${t === 'todas' ? 'Cualquiera' : t === 'mias' ? '👩‍🍳 Mis recetas' : t.replace('-', ' ')}</button>`).join('')}</div>
     <div class="grid g3">${list.map(r => recipeCard(r)).join('') || '<p class="muted">No hay recetas con esos filtros.</p>'}</div>`;
 }
 function generatePlan() {
@@ -910,7 +974,7 @@ function generatePlan() {
     const meals = {};
     MEALS.forEach(m => {
       const target = tg.kcal * m.share;
-      const pool = recipesFor(m.id).length ? recipesFor(m.id) : RECIPES.filter(r => r.tipo === m.id);
+      const pool = recipesFor(m.id).length ? recipesFor(m.id) : allRecipes().filter(r => r.tipo === m.id);
       // Evita repetir la misma receta en días seguidos y dentro del mismo día
       const dayIds = Object.values(meals).map(x => x.id);
       const scored = pool.map(r => ({ r, s: recipeScore(r, target) + (used[r.id] || 0) * 0.5 + (dayIds.includes(r.id) ? 5 : 0) }))
@@ -934,7 +998,7 @@ function viewPlan() {
       let tot = 0;
       const rows = MEALS.map(m => {
         const pm = d.meals[m.id];
-        const r = pm && RECIPES.find(x => x.id === pm.id);
+        const r = pm && allRecipes().find(x => x.id === pm.id);
         if (!r) return '';
         const n = recipeNutrition(r, pm.f); tot += n.kcal;
         return `<div class="item"><div class="info"><div class="muted small">${m.name}${pm.f !== 1 ? ` · ×${pm.f}` : ''}</div><div class="name">${esc(r.name)}</div></div>
@@ -949,7 +1013,7 @@ function shoppingList() {
   const p = state.plan;
   const tot = {};
   p.days.filter(d => d.date >= todayKey()).forEach(d => Object.values(d.meals).forEach(pm => {
-    const r = RECIPES.find(x => x.id === pm.id);
+    const r = allRecipes().find(x => x.id === pm.id);
     if (r) r.ing.forEach(([id, g]) => { tot[id] = (tot[id] || 0) + g * pm.f; });
   }));
   const groups = {};
@@ -966,7 +1030,7 @@ function viewCompras() {
   const groups = shoppingList();
   const checked = state.plan.checked || {};
   return `<div class="row" style="margin-bottom:12px;flex-wrap:wrap"><span class="muted small">Ingredientes de tu plan desde hoy. Marca lo que ya tienes o compraste.</span>
-      <button class="btn ghost sm" id="copyList">📋 Copiar lista</button></div>
+      <div class="btn-row" style="margin:0"><button class="btn ghost sm" id="copyList">📋 Copiar</button><button class="btn ghost sm" id="shareList">📤 Compartir</button></div></div>
     <div class="grid g2">${Object.entries(groups).map(([cat, items]) => `<div class="card"><h3>${esc(cat)}</h3>
       ${items.map(it => `<label class="check ${checked[it.id] ? 'done' : ''}"><input type="checkbox" data-check="${it.id}" ${checked[it.id] ? 'checked' : ''}><span>${esc(it.name)}</span><b>${fmtQty(it.g)}</b></label>`).join('')}
     </div>`).join('')}</div>`;
@@ -979,7 +1043,7 @@ bind.recetas = () => {
   if (sb) sb.addEventListener('click', () => {
     const { meal, target, left } = nextMealTarget();
     let pool = recipesFor(meal.id);
-    if (left <= 0) pool = RECIPES.filter(r => r.tipo === 'snack');
+    if (left <= 0) pool = allRecipes().filter(r => r.tipo === 'snack');
     const tgt = left > 0 ? target : 200;
     ui.suggest = pool.map(r => ({ r, s: recipeScore(r, tgt) })).sort((a, b) => a.s - b.s).slice(0, 3).map(x => x.r.id);
     render();
@@ -1004,12 +1068,23 @@ bind.recetas = () => {
     c.closest('.check').classList.toggle('done', c.checked);
     save();
   }));
+  const listText = () => '🛒 Lista de compras FitPlan\n\n' + Object.entries(shoppingList()).map(([cat, items]) => {
+    const pend = items.filter(i => !(state.plan.checked || {})[i.id]);
+    return pend.length ? cat + ':\n' + pend.map(i => `• ${i.name}: ${fmtQty(i.g)}`).join('\n') : '';
+  }).filter(Boolean).join('\n\n');
   const cl = $('#copyList');
   if (cl) cl.addEventListener('click', () => {
-    const groups = shoppingList();
-    const txt = Object.entries(groups).map(([cat, items]) => cat + ':\n' + items.filter(i => !(state.plan.checked || {})[i.id]).map(i => `- ${i.name}: ${fmtQty(i.g)}`).join('\n')).join('\n\n');
-    (navigator.clipboard ? navigator.clipboard.writeText(txt) : Promise.reject()).then(() => toast('Lista copiada')).catch(() => toast('No pude copiar la lista'));
+    (navigator.clipboard ? navigator.clipboard.writeText(listText()) : Promise.reject()).then(() => toast('Lista copiada')).catch(() => toast('No pude copiar la lista'));
   });
+  const sl = $('#shareList');
+  if (sl) sl.addEventListener('click', () => {
+    const txt = listText();
+    if (navigator.share) navigator.share({ text: txt }).catch(() => {});
+    else window.open('https://wa.me/?text=' + encodeURIComponent(txt), '_blank', 'noopener');
+  });
+  const nr = $('#newRecipe');
+  if (nr) nr.addEventListener('click', () => recipeEditor());
+  $$('[data-edit-recipe]').forEach(b => b.addEventListener('click', () => recipeEditor(b.dataset.editRecipe)));
   bindLogRecipe();
 };
 
