@@ -47,6 +47,65 @@ function nudges(d, tg) {
   }
   return out.filter(n => !dismissed.includes(n.id)).slice(0, 2);
 }
+// ---------- Ayuno intermitente ----------
+const FAST_PLANS = [12, 14, 16, 18, 20];
+const fmtDur = ms => { const m = Math.max(0, Math.floor(ms / 60000)); return `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')} min`; };
+const hhmm = t => new Date(t).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' });
+function fastingCard() {
+  const f = state.fasting;
+  if (!f || !f.on) return '';
+  const done = f.log.slice(-7);
+  const stats = done.length ? `Últimos ${done.length}: ${done.filter(x => x.ok).length} cumplidos · promedio ${r1(done.reduce((a, x) => a + (x.end - x.start), 0) / done.length / 3600000).toLocaleString('es')} h` : '';
+  if (!f.start) {
+    const last = f.log[f.log.length - 1];
+    return `<div class="card fast-card">
+      <div class="row"><h2>⏱️ Ayuno ${f.plan}:${24 - f.plan}</h2><span class="muted small">ventana para comer abierta</span></div>
+      ${last ? `<p class="muted small" style="margin:0 0 10px">Último ayuno: ${fmtDur(last.end - last.start)} ${last.ok ? '✓' : ''}</p>` : ''}
+      <div class="btn-row"><button class="btn" id="fastStart" style="flex:1">Empezar ayuno ahora</button><button class="btn ghost" id="fastEarlier">Empecé antes…</button></div>
+      ${stats ? `<p class="muted small" style="margin:8px 0 0">${stats}</p>` : ''}
+    </div>`;
+  }
+  const el = Date.now() - f.start, goal = f.plan * 3600000;
+  return `<div class="card fast-card on">
+    <div class="row"><h2>⏱️ En ayuno</h2><span class="muted small">meta ${f.plan} h</span></div>
+    <div class="fast-t" id="fastT">${fmtDur(el)}</div>
+    <div class="bar" style="height:10px"><span id="fastBar" style="width:${Math.min(100, el / goal * 100)}%;background:var(--accent)"></span></div>
+    <p class="small" id="fastMsg" style="margin:8px 0 10px">${el >= goal ? '✓ ¡Meta cumplida! Puedes comer cuando quieras.' : `Empezaste a las ${hhmm(f.start)} · terminas a las <b>${hhmm(f.start + goal)}</b>`}</p>
+    <button class="btn ${el >= goal ? '' : 'ghost'}" id="fastEnd" style="width:100%">${el >= goal ? '🍽️ Terminar ayuno' : 'Terminar antes'}</button>
+    ${stats ? `<p class="muted small" style="margin:8px 0 0">${stats}</p>` : ''}
+  </div>`;
+}
+// Actualiza el contador del ayuno cada 30 s sin redibujar la pantalla
+setInterval(() => {
+  const f = state.fasting, t = document.getElementById('fastT');
+  if (!f || !f.start || !t) return;
+  const el = Date.now() - f.start, goal = f.plan * 3600000;
+  t.textContent = fmtDur(el);
+  const b = document.getElementById('fastBar'); if (b) b.style.width = Math.min(100, el / goal * 100) + '%';
+  if (el >= goal && !t.dataset.done) { t.dataset.done = '1'; render(); }
+}, 30000);
+function bindFasting() {
+  const f = state.fasting;
+  const start = t => { f.start = t; save(); render(); toast(`⏱️ Ayuno iniciado: termina a las ${hhmm(t + f.plan * 3600000)}`); };
+  const s = $('#fastStart'); if (s) s.addEventListener('click', () => start(Date.now()));
+  const e = $('#fastEarlier');
+  if (e) e.addEventListener('click', () => openModal(`<h2>¿A qué hora empezaste?</h2>
+    <div class="field"><input id="fastAt" type="time" value="${hhmm(Date.now() - 3600000)}"></div>
+    <button class="btn" id="fastAtOk" style="width:100%">Empezar desde esa hora</button>`, m => m.querySelector('#fastAtOk').addEventListener('click', () => {
+    const [h, mi] = m.querySelector('#fastAt').value.split(':').map(Number);
+    const d = new Date(); d.setHours(h, mi, 0, 0);
+    if (d.getTime() > Date.now()) d.setDate(d.getDate() - 1); // fue ayer en la noche
+    closeModal(); start(d.getTime());
+  })));
+  const en = $('#fastEnd');
+  if (en) en.addEventListener('click', () => {
+    const end = Date.now(), ok = end - f.start >= f.plan * 3600000;
+    f.log = [...f.log, { start: f.start, end, plan: f.plan, ok }].slice(-60);
+    f.start = null; save(); render();
+    toast(ok ? `🎉 Ayuno de ${fmtDur(end - f.log[f.log.length - 1].start)} cumplido` : `Ayuno de ${fmtDur(end - f.log[f.log.length - 1].start)} registrado`);
+    if (ok) confetti(40);
+  });
+}
 const fmtKcal = n => Math.round(Math.abs(n)).toLocaleString('es');
 const fmtKg = n => (Math.round(Math.abs(n) * 100) / 100).toLocaleString('es');
 const longDate = k => parseKey(k).toLocaleDateString('es', { day: 'numeric', month: 'long' });
@@ -166,7 +225,7 @@ function viewHoy() {
     const sum = items.reduce((a, f) => a + f.kcal, 0);
     const canRepeat = !items.length && prev.foods.some(f => f.meal === m.id);
     return `<div class="meal"><div class="meal-head"><h3><span class="ico-c">${MEAL_ICO[m.id] || '🍽️'}</span>${m.name}${items.length ? ` <span class="muted small" style="font-weight:500">${r0(sum)} kcal</span>` : ''}</h3>
-      <div class="meal-acts">${canRepeat ? `<button class="see" data-repeat="${m.id}">↺ Ayer</button>` : ''}<button class="add-meal" data-add-meal="${m.id}" aria-label="Agregar a ${m.name}">＋</button></div></div>
+      <div class="meal-acts">${canRepeat ? `<button class="see" data-repeat="${m.id}">↺ Ayer</button>` : ''}${items.length >= 2 ? `<button class="add-meal" data-save-combo="${m.id}" aria-label="Guardar ${m.name} como combo" title="Guardar como combo">💾</button>` : ''}<button class="add-meal" data-add-meal="${m.id}" aria-label="Agregar a ${m.name}">＋</button></div></div>
       <div class="list">${items.length ? items.map(f => `
         <div class="item tappable" data-edit-food="${f.id}" tabindex="0" role="button">
           <span class="fi sm" aria-hidden="true">${entryIcon(f)}</span>
@@ -259,6 +318,7 @@ function viewHoy() {
             <button class="round-btn water-plus" data-water-step="1" aria-label="Agregar un vaso">＋</button>
           </div>
         </div>
+        ${fastingCard()}
         ${deficitCard(tg)}
         ${challengesCard()}
         <div class="card">
@@ -314,6 +374,19 @@ bind.hoy = () => {
     const c = state.challenges.find(x => x.id === b.dataset.checkCh && !x.closed);
     c.checks = { ...(c.checks || {}), [todayKey()]: true };
     tap(); save(); render(); toast('✓ ¡Un día más!');
+  }));
+  if (state.fasting && state.fasting.on) bindFasting();
+  $$('[data-save-combo]').forEach(b => b.addEventListener('click', () => {
+    const meal = b.dataset.saveCombo, items = day().foods.filter(f => f.meal === meal);
+    const name0 = `Mi ${MEALS.find(m => m.id === meal).name.toLowerCase()}`;
+    openModal(`<h2>Guardar como combo</h2>
+      <p class="muted small" style="margin-top:-6px">${items.map(x => esc(x.name)).join(', ')} · ${r0(items.reduce((a, x) => a + x.kcal, 0))} kcal</p>
+      <div class="field"><label for="cbName">Nombre</label><input id="cbName" value="${esc(name0)}"></div>
+      <button class="btn" id="cbSave" style="width:100%">Guardar combo</button>`, m => m.querySelector('#cbSave').addEventListener('click', () => {
+      const name = m.querySelector('#cbName').value.trim() || name0;
+      state.combos.push({ id: uid(), name, meal, items: items.map(({ id, ...x }) => x) });
+      save(); closeModal(); toast(`🍱 Combo "${name}" guardado: lo encuentras en Comidas → Combos`);
+    }));
   }));
   closeChallenges();
   maybeWeekly();

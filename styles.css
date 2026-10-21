@@ -705,3 +705,8 @@ body:has(.modal-back) .toast { bottom: auto; top: calc(16px + env(safe-area-inse
 .weekly .minis { text-align: center; }
 .weekly .hint-box { text-align: left; }
 @media (max-width: 440px) { .tabs .te { display: none; } }
+
+/* ---------- Ayuno y lector de etiquetas ---------- */
+.fast-card.on { border-color: var(--accent); }
+.fast-t { font-size: 34px; font-weight: 800; font-variant-numeric: tabular-nums; margin: 4px 0 8px; }
+.label-btn { display: block; text-align: center; cursor: pointer; }

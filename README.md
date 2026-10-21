@@ -53,6 +53,7 @@ Los datos se guardan en tu cuenta de Firebase y se actualizan en todos tus dispo
 - **Ritmo para perder**: suave (−300 kcal), moderado (−500) o rápido (−750), en Perfil o en Progreso → Déficit.
 - **Balance**: Hoy muestra el déficit de ayer y de los últimos 7 días con la grasa estimada (7.700 kcal ≈ 1 kg). Progreso → Déficit tiene el gráfico de 14 días, el acumulado de 30 días, lo estimado contra lo que dice la balanza y cuándo llegarías a tu peso meta.
 - **Avisos** si el déficit es muy agresivo, si comes bajo tu metabolismo basal, si bajas más de 1 % por semana o si falta proteína. Después de 8 semanas en déficit sugiere una semana en mantención.
+- **Comida**: combos (guarda una comida de varios alimentos y agrégala con un toque), ayuno intermitente con contador (Perfil → Ayuno) y lectura de la etiqueta nutricional con la cámara (Comidas → 🏷️ Etiqueta / crear).
 - **Resumen semanal** automático el primer día que abres la app en la semana, con una sugerencia concreta.
 - **Desafíos de 30 días**: proteína, agua, registro, déficit, entrenamientos, pasos, sin bebidas azucaradas y sueño.
 
@@ -76,6 +77,7 @@ Cada cambio corre `npm test` en GitHub (pruebas de la app en un navegador con ta
 - `exercises.js`: ejercicios (Exercise data by RepDB, repdb.co). Las imágenes se cargan de internet la primera vez y luego quedan guardadas si la app está instalada.
 - `data.js`: actividades y recetas. Puedes editarlo para agregar más.
 - `vendor/zxing.min.js`: lector de códigos de barras (licencia MIT).
+- `vendor/tesseract/`: lector de texto para las etiquetas nutricionales (tesseract.js, Apache-2.0). Se descarga solo la primera vez que se usa (≈6 MB) y funciona dentro del teléfono.
 - `manifest.json`, `sw.js`, `icon.svg`: para instalarla como app y usarla sin conexión.
 
 ## Notas

@@ -53,6 +53,12 @@ function viewPerfil() {
           <div class="field"><label>Tema</label><div class="chips">${[['auto', '🌗 Automático'], ['light', '☀️ Claro'], ['dark', '🌙 Oscuro']].map(([k, l]) => `<button class="chip ${themePrefs().mode === k ? 'active' : ''}" data-theme-mode="${k}">${l}</button>`).join('')}</div></div>
           <div class="field"><label>Color principal</label><div class="swatches">${Object.entries(ACCENTS).map(([k, c]) => `<button class="swatch ${themePrefs().accent === k ? 'on' : ''}" data-accent="${k}" style="background:${c[0]}" aria-label="${k}" title="${k}"></button>`).join('')}</div></div>
         </div>
+        <div class="card">
+          <h2>⏱️ Ayuno intermitente</h2>
+          <label class="check" style="border:0;padding:0"><input type="checkbox" id="fastOn" ${state.fasting && state.fasting.on ? 'checked' : ''}><span>Mostrar el contador de ayuno en Hoy</span></label>
+          <div class="field" style="margin-top:8px"><label for="fastPlan">Horas de ayuno</label><select id="fastPlan">${FAST_PLANS.map(h => `<option value="${h}" ${h === (state.fasting ? state.fasting.plan : 16) ? 'selected' : ''}>${h}:${24 - h} (${h} h de ayuno, ${24 - h} h para comer)</option>`).join('')}</select></div>
+          <p class="muted small">El ayuno no reemplaza el déficit: lo que cuenta es el total del día. A algunas personas les ayuda a ordenar los horarios.</p>
+        </div>
         <div class="card" id="syncCard"></div>
         <div class="card">
           <h2>Créditos</h2>
@@ -76,6 +82,9 @@ function syncCardHtml() {
 }
 let offSync = null;
 bind.perfil = () => {
+  const fo = $('#fastOn'), fp = $('#fastPlan');
+  const setFast = () => { state.fasting = { log: [], start: null, ...(state.fasting || {}), on: fo.checked, plan: Number(fp.value) }; save(); toast(fo.checked ? '⏱️ Ayuno activado: lo verás en Hoy' : 'Ayuno desactivado'); };
+  if (fo) { fo.addEventListener('change', setFast); fp.addEventListener('change', setFast); }
   const setTheme = patch => { try { localStorage.setItem(THEME_KEY, JSON.stringify({ ...themePrefs(), ...patch })); } catch (e) { /* ignorar */ } applyTheme(); render(); };
   $$('[data-theme-mode]').forEach(b => b.addEventListener('click', () => setTheme({ mode: b.dataset.themeMode })));
   $$('[data-accent]').forEach(b => b.addEventListener('click', () => setTheme({ accent: b.dataset.accent })));

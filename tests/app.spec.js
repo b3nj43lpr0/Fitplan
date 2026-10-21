@@ -347,3 +347,54 @@ test('Desafíos de 30 días y resumen semanal', async ({ page }) => {
   await page.waitForTimeout(1000);
   await expect(page.locator('.weekly')).toHaveCount(0);
 });
+
+test('Leer la etiqueta nutricional con la cámara (OCR)', async ({ page }) => {
+  test.setTimeout(120000);
+  await page.click('[data-view=comidas]');
+  await page.click('#newFood');
+  await page.setInputFiles('#cfPhoto', require('path').join(__dirname, 'assets', 'etiqueta.png'));
+  await expect(page.locator('#cfStatus')).toContainText('Leí 4 de 4', { timeout: 90000 });
+  expect(await page.inputValue('#cfKcal')).toBe('420');
+  expect(await page.inputValue('#cfP')).toBe('8.5');
+  expect(await page.inputValue('#cfG')).toBe('15.2');
+  expect(await page.inputValue('#cfC')).toBe('62');
+  expect(await page.inputValue('#cfPor')).toBe('30');
+  // El intérprete también entiende etiquetas con la porción primero o con kJ
+  const r = await page.evaluate(() => [
+    parseLabel('Porción 200 ml\n 1 porción 100 ml\nEnergía (kcal) 130 65\nProteínas (g) 6,4 3,2\nGrasa total (g) 3,0 1,5\nHidratos de carbono disponibles (g) 19,6 9,8'),
+    parseLabel('Por 100 g\nEnergía 1760 kJ / 420 kcal\nGrasas 15 g\nde las cuales saturadas 6 g\nHidratos de carbono 62 g\nProteínas 8.5 g'),
+  ]);
+  expect(r[0]).toMatchObject({ kcal: 65, p: 3.2, g: 1.5, c: 9.8, por: 200 });
+  expect(r[1]).toMatchObject({ kcal: 420, p: 8.5, g: 15, c: 62 });
+});
+
+test('Combos y ayuno intermitente', async ({ page }) => {
+  // Guardar el desayuno de hoy (avena + plátano) como combo
+  await page.click('[data-save-combo=desayuno]');
+  await page.fill('#cbName', 'Desayuno de siempre');
+  await page.click('#cbSave');
+  expect((await state(page)).combos).toHaveLength(1);
+  await page.click('[data-view=comidas]');
+  await page.click('[data-pick-meal=snack]');
+  await page.click('[data-cat="🍱 Combos"]');
+  const n0 = (await today(page)).foods.length;
+  await page.click('[data-combo-add]');
+  const foods = (await today(page)).foods;
+  expect(foods.length).toBe(n0 + 2);
+  expect(foods.slice(-2).every(f => f.meal === 'snack')).toBe(true);
+  // Ayuno: se activa en Perfil y aparece en Hoy
+  await page.click('.page-head [data-go=perfil]');
+  await page.selectOption('#fastPlan', '16');
+  await page.check('#fastOn');
+  await page.click('[data-view=hoy]');
+  await page.click('#fastStart');
+  expect((await state(page)).fasting.start).toBeGreaterThan(0);
+  await expect(page.locator('.fast-card')).toContainText('En ayuno');
+  // Simulamos que empezó hace 17 horas: la meta está cumplida
+  await page.evaluate(() => { state.fasting.start = Date.now() - 17 * 3600000; render(); });
+  await expect(page.locator('#fastMsg')).toContainText('Meta cumplida');
+  await page.click('#fastEnd');
+  const f = (await state(page)).fasting;
+  expect(f.start).toBeNull();
+  expect(f.log.at(-1).ok).toBe(true);
+});
