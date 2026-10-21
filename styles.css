@@ -745,3 +745,4 @@ button.avatar { border: 0; cursor: pointer; font-family: inherit; }
 .coach-input input { flex: 1; }
 .coach-input .btn { padding: 0 18px; }
 .coach-foot { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 8px; }
+.msg.thinking { color: var(--muted); font-style: italic; }

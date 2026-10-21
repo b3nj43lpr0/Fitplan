@@ -106,6 +106,7 @@ function coachErrorText(e) {
   const m = String((e && (e.code || e.message)) || '');
   if (m === 'auth') return 'Para usar el coach con IA, inicia sesión con Google en Perfil → Sincronización (así nadie más puede usarlo).';
   if (m === 'offline' || /network|failed to fetch|load/i.test(m)) return 'No hay conexión con la IA ahora. Te dejo el análisis del coach básico:';
+  if (/timeout|tardó/i.test(m)) return 'La IA tardó demasiado en responder (puede ser la señal o mucha demanda). Prueba de nuevo en un momento. Mientras, el coach básico:';
   if (/429|quota|resource.?exhausted|rate/i.test(m)) return 'Se acabó la cuota gratis de la IA por ahora; vuelve a intentar más tarde. Mientras, el coach básico:';
   if (/app check/i.test(m)) return 'Firebase está exigiendo App Check para la IA. Desactívalo en Firebase → Seguridad → App Check → APIs → Firebase AI Logic → Dejar de aplicar. Mientras, el coach básico:';
   if (/permission|403|not been used|disabled|enable|api-not-enabled|billing/i.test(m)) return 'Falta activar la IA en Firebase (AI Logic → Gemini Developer API). Mientras, el coach básico:';
@@ -143,6 +144,8 @@ function openCoach() {
       tmp.className = 'msg model typing';
       tmp.innerHTML = '<span></span><span></span><span></span>';
       box.appendChild(tmp); box.scrollTop = box.scrollHeight;
+      // Si tarda, se avisa que sigue pensando
+      const slow = setTimeout(() => { if (tmp.classList.contains('typing')) { tmp.classList.remove('typing'); tmp.classList.add('thinking'); tmp.textContent = 'Pensando… (puede tardar unos segundos)'; } }, 6000);
       let answer;
       try {
         if (!window.FitSync || !window.FitSync.ask) throw Object.assign(new Error('offline'), { code: 'offline' });
@@ -150,7 +153,7 @@ function openCoach() {
         answer = await window.FitSync.ask({
           history, system: COACH_SYSTEM,
           message: `DATOS ACTUALIZADOS:\n${coachContext()}\n\nPREGUNTA: ${text}`,
-          onChunk: t => { tmp.classList.remove('typing'); tmp.innerHTML = mdLite(t); box.scrollTop = box.scrollHeight; },
+          onChunk: t => { tmp.classList.remove('typing', 'thinking'); tmp.innerHTML = mdLite(t); box.scrollTop = box.scrollHeight; },
         });
       } catch (e) {
         const fallback = basicCoach(topic && ['bien', 'mejorar', 'meta'].includes(topic) ? topic : 'semana');
@@ -159,6 +162,7 @@ function openCoach() {
         console.warn('Coach IA:', e);
         answer = coachErrorText(e) + '\n' + fallback.map(x => '- ' + x).join('\n') + detail;
       }
+      clearTimeout(slow);
       log.push({ role: 'model', text: answer });
       storeCoach(log);
       paint();

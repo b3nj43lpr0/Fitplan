@@ -276,24 +276,44 @@
   // Modelos gratuitos de Firebase AI Logic (octubre de 2026); si Google retira uno, se usa el siguiente
   const AI_MODELS = ['gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-2.5-flash'];
   let aiMod = null;
-  async function ask({ history = [], message, system, onChunk }) {
+  // Espera máxima por intento; si no llega nada, se avisa en vez de quedar cargando para siempre
+  const AI_TIMEOUT = 45000;
+  const withTimeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => { const e = new Error('timeout: la IA tardó más de ' + ms / 1000 + ' s'); e.code = 'timeout'; rej(e); }, ms))]);
+  async function ask({ history = [], message, system, onChunk, timeoutMs = AI_TIMEOUT }) {
     if (!fb || !fb.app) { const e = new Error('offline'); e.code = 'offline'; throw e; }
     if (!S.user) { const e = new Error('auth'); e.code = 'auth'; throw e; }
     aiMod = aiMod || await import(BASE + 'firebase-ai.js');
     const ai = aiMod.getAI(fb.app, { backend: new aiMod.GoogleAIBackend() });
+    const hist = history.map(h => ({ role: h.role === 'user' ? 'user' : 'model', parts: [{ text: h.text }] }));
+    // Pensar poco (LOW) responde mucho más rápido; si un modelo no acepta la opción, se reintenta sin ella
+    const configs = [{ thinkingConfig: { thinkingLevel: 'LOW' }, maxOutputTokens: 1024 }, { maxOutputTokens: 1024 }];
     let lastErr = null;
     for (const model of AI_MODELS) {
-      try {
-        const gm = aiMod.getGenerativeModel(ai, { model, systemInstruction: system });
-        const chat = gm.startChat({ history: history.map(h => ({ role: h.role === 'user' ? 'user' : 'model', parts: [{ text: h.text }] })) });
-        const res = await chat.sendMessageStream(message);
-        let full = '';
-        for await (const ch of res.stream) { full += ch.text(); if (onChunk) onChunk(full); }
-        return full;
-      } catch (e) {
-        lastErr = e;
-        // Permisos o cuota no se arreglan cambiando de modelo; cualquier otro error, se prueba el siguiente
-        if (/permission|403|api.?key|quota|429|resource.?exhausted|billing|unauthenticated|401/i.test(String(e && e.message))) break;
+      for (const generationConfig of configs) {
+        try {
+          const gm = aiMod.getGenerativeModel(ai, { model, systemInstruction: system, generationConfig }, { timeout: timeoutMs });
+          const chat = gm.startChat({ history: hist });
+          const run = async () => {
+            const res = await chat.sendMessageStream(message);
+            let full = '';
+            for await (const ch of res.stream) {
+              let t = '';
+              try { t = ch.text(); } catch (e) { t = ''; } // fragmentos sin texto (p. ej., solo "pensamiento")
+              if (t) { full += t; if (onChunk) onChunk(full); }
+            }
+            if (!full) { const e = new Error('respuesta vacía'); e.code = 'empty'; throw e; }
+            return full;
+          };
+          return await withTimeout(run(), timeoutMs + 5000);
+        } catch (e) {
+          lastErr = e;
+          const m = String(e && e.message);
+          // Permisos, App Check o cuota no se arreglan cambiando de modelo
+          if (/permission|403|api.?key|quota|429|resource.?exhausted|billing|unauthenticated|401|app check/i.test(m)) throw e;
+          if (e.code === 'timeout') throw e;
+          // Si el problema fue la opción de pensamiento, se prueba la misma IA sin ella; si no, el siguiente modelo
+          if (!/think/i.test(m)) break;
+        }
       }
     }
     throw lastErr;
@@ -310,7 +330,7 @@
     },
     async signOut() { if (fb) await fb.signOut(fb.auth); },
     ask,
-    _test: { inject: f => { fb = f; }, start, push, getSynced: () => synced },
+    _test: { inject: f => { fb = f; }, injectAI: m => { aiMod = m; }, setUser: u => { S.user = u; }, start, push, getSynced: () => synced },
   };
   init();
 })();
