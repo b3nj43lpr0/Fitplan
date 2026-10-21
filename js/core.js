@@ -27,7 +27,7 @@ const DIETS = {
   lowcarb: { label: 'Baja en carbohidratos', fatPct: 0.45 },
   vegetariana: { label: 'Vegetariana', fatPct: 0.25 },
 };
-const EMPTY = () => ({ profile: null, days: {}, customFoods: [], routine: null, weights: [], measures: [], plan: null, ajuste: 0, lastAdjust: null, favFoods: [], workouts: [], customRecipes: [], badges: [] });
+const EMPTY = () => ({ profile: null, days: {}, customFoods: [], routine: null, weights: [], measures: [], plan: null, ajuste: 0, lastAdjust: null, favFoods: [], workouts: [], customRecipes: [], badges: [], customExercises: [] });
 
 // ---------- Tema (se guarda por dispositivo) ----------
 const THEME_KEY = 'fitplan-theme';
@@ -118,7 +118,7 @@ function allRecipes() { return [...RECIPES, ...state.customRecipes]; }
 function allFoods() { return [...FOODS, ...state.customFoods]; }
 function foodById(id) { return allFoods().find(f => f.id === id); }
 // La biblioteca de ejercicios (≈700 KB) se carga solo cuando hace falta
-function exDB() { return typeof EXERCISE_DB !== 'undefined' ? EXERCISE_DB : []; }
+function exDB() { return typeof EXERCISE_DB !== 'undefined' ? (state.customExercises.length ? [...EXERCISE_DB, ...state.customExercises] : EXERCISE_DB) : []; }
 function exReady() { return typeof EXERCISE_DB !== 'undefined'; }
 function loadExercises() {
   if (exReady()) return Promise.resolve();
@@ -241,6 +241,11 @@ function calcTargets(p = state.profile) {
   const imc = peso / Math.pow(p.altura / 100, 2);
   const water = Math.round((peso * 35) / 250); // vasos de 250 ml
   return { bmr, tdee, kcal, prot, fat, carb, imc, water, peso, ajuste };
+}
+// Metas de macros del día: las calorías quemadas se "devuelven" sobre todo como carbohidratos (70 %) y algo de grasa
+function dayGoals(tg, burned) {
+  const extra = burned >= 100 ? burned : 0;
+  return { prot: tg.prot, carb: tg.carb + extra * 0.7 / 4, fat: tg.fat + extra * 0.3 / 9, train: extra > 0 };
 }
 function totals(d) {
   const t = { kcal: 0, p: 0, c: 0, g: 0, burned: 0 };

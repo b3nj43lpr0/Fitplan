@@ -191,11 +191,17 @@ function generatePlan() {
   const tg = calcTargets();
   const days = [];
   const used = {};
+  // Si hay rutina, los días de entrenamiento se reparten en la semana y suman las calorías de la sesión
+  const r = state.routine;
+  const trainIdx = r ? new Set(Array.from({ length: r.dias }, (_, k) => Math.floor(k * 7 / r.dias))) : new Set();
+  const extra = r ? burnedKcal(r.objetivo === 'perder' ? 6 : 5, r.minutos) : 0;
   for (let i = 0; i < 7; i++) {
     const date = shiftKey(todayKey(), i);
     const meals = {};
+    const train = trainIdx.has(i);
+    const dayKcal = tg.kcal + (train ? extra : 0);
     MEALS.forEach(m => {
-      const target = tg.kcal * m.share;
+      const target = dayKcal * m.share;
       const pool = recipesFor(m.id).length ? recipesFor(m.id) : allRecipes().filter(r => r.tipo === m.id);
       // Evita repetir la misma receta en días seguidos y dentro del mismo día
       const dayIds = Object.values(meals).map(x => x.id);
@@ -205,14 +211,14 @@ function generatePlan() {
       used[r.id] = (used[r.id] || 0) + 1;
       meals[m.id] = { id: r.id, f: scaleFactor(r, target) };
     });
-    days.push({ date, meals });
+    days.push({ date, meals, train });
   }
   state.plan = { created: todayKey(), days, checked: {} };
 }
 function viewPlan() {
   const p = state.plan;
   if (!p) return `<div class="card"><h2>Plan de comidas semanal</h2>
-    <p class="muted">Armo 7 días de desayuno, almuerzo, snack y cena con nuestras recetas, ajustando cada porción a tu meta de ${r0(calcTargets().kcal)} kcal${state.profile.dieta && state.profile.dieta !== 'equilibrada' ? ' y a tu dieta ' + DIETS[state.profile.dieta].label.toLowerCase() : ''}. Después puedes cambiar cualquier comida y sacar la lista de compras.</p>
+    <p class="muted">Armo 7 días de desayuno, almuerzo, snack y cena con nuestras recetas, ajustando cada porción a tu meta de ${r0(calcTargets().kcal)} kcal${state.profile.dieta && state.profile.dieta !== 'equilibrada' ? ' y a tu dieta ' + DIETS[state.profile.dieta].label.toLowerCase() : ''}${state.routine ? '. Los días de entrenamiento suman las calorías de la sesión' : ''}. Después puedes cambiar cualquier comida y sacar la lista de compras.</p>
     <button class="btn" id="genPlan">✨ Generar mi plan</button></div>`;
   return `<div class="row" style="margin-bottom:12px;flex-wrap:wrap"><span class="muted small">Plan creado el ${shortDate(p.created)}. Toca 🔄 para cambiar una comida.</span>
       <button class="btn ghost sm" id="genPlan">🔄 Generar plan nuevo</button></div>
@@ -228,7 +234,7 @@ function viewPlan() {
           <button class="icon-btn swap" data-swap="${di}:${m.id}" aria-label="Cambiar" title="Cambiar">🔄</button>
           ${d.date === todayKey() ? `<button class="icon-btn swap" data-log-recipe="${r.id}" data-factor="${pm.f}" data-meal="${m.id}" title="Agregar a hoy" aria-label="Agregar a hoy">＋</button>` : ''}</div>`;
       }).join('');
-      return `<div class="card ${d.date === todayKey() ? 'today' : ''}"><div class="row"><h3 style="margin:0;text-transform:capitalize">${esc(prettyDate(d.date) === 'Hoy' ? 'Hoy' : parseKey(d.date).toLocaleDateString('es', { weekday: 'long', day: 'numeric' }))}</h3><span class="muted small">${r0(tot)} kcal</span></div><div class="list">${rows}</div></div>`;
+      return `<div class="card ${d.date === todayKey() ? 'today' : ''}"><div class="row"><h3 style="margin:0;text-transform:capitalize">${esc(prettyDate(d.date) === 'Hoy' ? 'Hoy' : parseKey(d.date).toLocaleDateString('es', { weekday: 'long', day: 'numeric' }))}${d.train ? ' <span class="tag ss">💪 entreno</span>' : ''}</h3><span class="muted small">${r0(tot)} kcal</span></div><div class="list">${rows}</div></div>`;
     }).join('')}</div>`;
 }
 function shoppingList() {
@@ -277,7 +283,8 @@ bind.recetas = () => {
     const [di, mealId] = b.dataset.swap.split(':');
     const d = state.plan.days[Number(di)];
     const cur = d.meals[mealId].id;
-    const target = calcTargets().kcal * MEALS.find(m => m.id === mealId).share;
+    const r0t = state.routine, extra = d.train && r0t ? burnedKcal(r0t.objetivo === 'perder' ? 6 : 5, r0t.minutos) : 0;
+    const target = (calcTargets().kcal + extra) * MEALS.find(m => m.id === mealId).share;
     const pool = recipesFor(mealId).filter(r => r.id !== cur);
     if (!pool.length) return toast('No hay otra receta para esa comida');
     const r = pool.map(r => ({ r, s: recipeScore(r, target) + Math.random() })).sort((a, c) => a.s - c.s)[0].r;

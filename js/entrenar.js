@@ -57,16 +57,42 @@ function generateRoutine(opts) {
       const cardio = shuffle(exDB().filter(e => e.cat === 'cardio' && (equipo === 'gym' || (equipo === 'casa' ? e.bw : e.home))))[0];
       if (cardio) list.push({ ex: cardio.id, series: nivel === 'principiante' ? 3 : 4, reps: '40 s', rest: '20 s', finisher: true });
     }
-    // Un estiramiento al final para los grupos trabajados
+    // Superseries (intermedio y avanzado): dos ejercicios seguidos de grupos distintos, descanso al final del par
+    if (nivel !== 'principiante') {
+      let letter = 0;
+      for (let i = 0; i + 1 < list.length; i++) {
+        const a = list[i], b = list[i + 1];
+        const ga = exById(a.ex).g, gb = exById(b.ex).g;
+        if (a.finisher || b.finisher || ga === 'core' || gb === 'core' || ga === gb) continue;
+        a.ss = b.ss = 'ABCDEF'[letter++];
+        i++;
+      }
+    }
+    // Calentamiento: 5 minutos de cardio suave y movilidad de los grupos del día
     const mainGroups = new Set(groups.map(s => s.split(':')[0]));
-    const stretch = shuffle(exDB().filter(e => e.cat === 'estiramiento' && mainGroups.has(e.g) && e.bw))[0];
+    const warm = [];
+    const easy = shuffle(exDB().filter(e => e.cat === 'cardio' && (equipo === 'gym' || (equipo === 'casa' ? e.bw : e.home))))[0];
+    if (easy) warm.push({ ex: easy.id, series: 1, reps: '5 min suave', rest: '-', warm: true });
+    const mob = shuffle(exDB().filter(e => e.cat === 'estiramiento' && mainGroups.has(e.g) && e.bw))[0];
+    if (mob) warm.push({ ex: mob.id, series: 1, reps: '30 s por lado', rest: '-', warm: true });
+    // Un estiramiento al final para los grupos trabajados
+    const stretch = shuffle(exDB().filter(e => e.cat === 'estiramiento' && mainGroups.has(e.g) && e.bw && (!mob || e.id !== mob.id)))[0];
     if (stretch) list.push({ ex: stretch.id, series: 1, reps: '30 s por lado', rest: '-', stretch: true });
-    return { name, exercises: list, done: false };
+    return { name, exercises: [...warm, ...list], done: false };
   });
-  return { ...opts, days, created: todayKey(), v: 2 };
+  return { ...opts, days, created: todayKey(), v: 3 };
 }
 function exThumb(e) {
+  if (!e.img || !e.img.length) return '<span class="ex-thumb ex-ph" aria-hidden="true">🏋️</span>';
   return `<img class="ex-thumb" loading="lazy" src="${EX_IMG_BASE + e.img[e.img.length - 1]}" alt="" onerror="this.style.visibility='hidden'">`;
+}
+// Etiquetas de un ejercicio dentro de la rutina
+function slotTags(x, list) {
+  const ssPos = x.ss ? list.filter(y => y.ss === x.ss).indexOf(x) + 1 : 0;
+  return (x.warm ? ' <span class="tag neutral">calentamiento</span>' : '')
+    + (x.ss ? ` <span class="tag ss">superserie ${x.ss}${ssPos}</span>` : '')
+    + (x.finisher ? ' <span class="tag type">final</span>' : '')
+    + (x.stretch ? ' <span class="tag neutral">estiramiento</span>' : '');
 }
 function viewRutinas() {
   const head = pageHead('Entrenar') + tabs('rut', ui.rutTab, [['rutina', '🏋️ Mi rutina'], ['actividad', '🔥 Actividad'], ['biblioteca', '📚 Ejercicios']]);
@@ -74,7 +100,7 @@ function viewRutinas() {
 }
 function viewMiRutina() {
   let r = state.routine;
-  if (r && r.v !== 2) r = state.routine = null; // rutinas antiguas usaban otra lista de ejercicios
+  if (r && !(r.v >= 2)) r = state.routine = null; // rutinas antiguas usaban otra lista de ejercicios
   const p = state.profile;
   const o = r || { objetivo: p.objetivo, nivel: 'principiante', dias: 3, equipo: 'gym', minutos: 45 };
   const kcalSesion = burnedKcal(o.objetivo === 'perder' ? 6 : 5, o.minutos);
@@ -112,7 +138,7 @@ function viewMiRutina() {
           <div class="day-list">${dd.exercises.map((x, j) => { const e = exById(x.ex); return e ? `
             <div class="ex" data-ex="${e.id}" data-slot="${i}:${j}" tabindex="0" role="button">
               ${exThumb(e)}
-              <span class="ex-name">${esc(e.n)}${x.finisher ? ' <span class="tag type">final</span>' : ''}${x.stretch ? ' <span class="tag neutral">estiramiento</span>' : ''}<span class="muted small">${x.series} × ${esc(x.reps)}${x.rest !== '-' ? ' · ' + esc(x.rest) : ''}</span></span>
+              <span class="ex-name">${esc(e.n)}${slotTags(x, dd.exercises)}<span class="muted small">${x.series} × ${esc(x.reps)}${x.rest !== '-' ? ' · ' + esc(x.rest) : ''}${suggestion(x) && suggestion(x).up ? ' · <b style="color:var(--accent)">↑ subir peso</b>' : ''}</span></span>
             </div>` : ''; }).join('')}</div>
           <button class="see" data-done="${i}">${dd.done ? 'Desmarcar como hecho' : 'Ya lo hice: marcar como hecho'}</button>
           <p class="muted small day-hint">Toca un ejercicio para ver la técnica o cambiarlo por otro.</p>` : ''}
@@ -132,7 +158,7 @@ function viewBiblioteca() {
       <input id="exSearch" type="search" placeholder="Buscar: sentadilla, bíceps, mancuernas…" value="${esc(ui.exQuery)}" autocomplete="off" style="margin-bottom:10px">
       <div class="chips scroll-x">${groups.map(g => `<button class="chip ${g === ui.exGroup ? 'active' : ''}" data-exg="${g}">${g === 'todos' ? 'Todos' : g[0].toUpperCase() + g.slice(1)}</button>`).join('')}</div>
       <div class="chips">${Object.entries(equips).map(([k, l]) => `<button class="chip ${k === ui.exEquip ? 'active' : ''}" data-exe="${k}">${l}</button>`).join('')}</div>
-      <div class="muted small">${list.length} ejercicios${list.length > shown.length ? ` (mostrando ${shown.length}; filtra para ver otros)` : ''}</div>
+      <div class="row"><span class="muted small">${list.length} ejercicios${list.length > shown.length ? ` (mostrando ${shown.length}; filtra para ver otros)` : ''}</span><button class="btn sm ghost" id="newEx">＋ Crear ejercicio</button></div>
     </div>
     <div class="ex-grid">${shown.map(e => `
       <button class="ex-card" data-ex="${e.id}">
@@ -156,8 +182,15 @@ function openExercise(id, slot) {
     <div class="btn-row">
       <a class="btn" href="${ytUrl('cómo hacer ' + e.n + ' técnica')}" target="_blank" rel="noopener">▶ Ver video en YouTube</a>
       ${slot ? '<button class="btn ghost" id="swapEx">🔄 Cambiar por otro ejercicio</button>' : ''}
+      ${e.custom && !slot ? '<button class="btn ghost" id="delEx" style="color:var(--danger)">Eliminar</button>' : ''}
     </div>
     <p class="muted small">Exercise data by <a href="https://repdb.co" target="_blank" rel="noopener">RepDB (repdb.co)</a></p>`, m => {
+    const de = m.querySelector('#delEx');
+    if (de) de.addEventListener('click', () => {
+      if (!confirm('¿Eliminar este ejercicio?')) return;
+      state.customExercises = state.customExercises.filter(x => x.id !== e.id);
+      save(); closeModal(); render();
+    });
     const sw = m.querySelector('#swapEx');
     if (sw) sw.addEventListener('click', () => {
       const [di, xi] = slot.split(':').map(Number);
@@ -192,6 +225,31 @@ bind.rutinas = () => {
     render();
     const s = $('#exSearch'); s.focus(); s.setSelectionRange(pos, pos);
   });
+  const ne = $('#newEx');
+  if (ne) ne.addEventListener('click', () => openModal(`
+    <h2>Crear ejercicio</h2>
+    <div class="field"><label for="ceName">Nombre</label><input id="ceName" placeholder="Ej: Remo en máquina del gimnasio"></div>
+    <div class="grid g2 keep" style="gap:10px">
+      <div class="field"><label for="ceG">Grupo</label><select id="ceG">${['pecho', 'espalda', 'piernas', 'hombros', 'brazos', 'core', 'cuerpo completo'].map(g => `<option>${g}</option>`).join('')}</select></div>
+      <div class="field"><label for="ceEq">Equipo</label><select id="ceEq"><option value="bw">Sin equipo</option><option value="home">Mancuernas o bandas</option><option value="gym" selected>Gimnasio</option></select></div>
+    </div>
+    <div class="field"><label for="ceM">Músculos (separados por coma)</label><input id="ceM" placeholder="Ej: dorsales, bíceps"></div>
+    <div class="field"><label for="ceIns">Cómo se hace (un paso por línea, opcional)</label><textarea id="ceIns" rows="3"></textarea></div>
+    <button class="btn" id="ceSave" style="width:100%">Guardar ejercicio</button>`, m => {
+    m.querySelector('#ceSave').addEventListener('click', () => {
+      const v = x => m.querySelector(x).value.trim();
+      if (!v('#ceName')) return toast('Ponle un nombre');
+      const eq = v('#ceEq');
+      state.customExercises.push({
+        id: 'u_' + uid(), n: v('#ceName'), d: '', cat: 'fuerza', g: v('#ceG'), custom: true,
+        eq: { bw: 'sin equipo', home: 'mancuernas o bandas', gym: 'gimnasio' }[eq], bw: eq === 'bw', home: eq !== 'gym', lv: 'principiante',
+        m: v('#ceM') ? v('#ceM').split(',').map(x => x.trim()).filter(Boolean) : [v('#ceG')], m2: [], img: [],
+        ins: v('#ceIns').split('\n').map(x => x.trim()).filter(Boolean), tips: [],
+      });
+      ui.exQuery = ''; ui.exGroup = 'todos'; ui.exEquip = 'todos';
+      save(); closeModal(); render(); toast('Ejercicio creado: aparece en la biblioteca y en tus rutinas');
+    });
+  }));
   $$('[data-exg]').forEach(b => b.addEventListener('click', () => { ui.exGroup = b.dataset.exg; render(); }));
   $$('[data-exe]').forEach(b => b.addEventListener('click', () => { ui.exEquip = b.dataset.exe; render(); }));
   const gr = $('#genRoutine');
@@ -250,6 +308,27 @@ function lastSets(exId) {
   return null;
 }
 const e1rm = s => s.kg * (1 + s.reps / 30); // fórmula de Epley
+// Progresión doble: si la última vez completaste todas las series en el tope del rango, sube el peso;
+// si no, mismo peso y una repetición más
+function repRange(r) {
+  if (/s\b|min/.test(r)) return null;
+  const n = String(r).match(/\d+/g);
+  return n ? [Number(n[0]), Number(n[n.length - 1])] : null;
+}
+function suggestion(x) {
+  const last = lastSets(x.ex), rg = repRange(x.reps);
+  if (!last || !last.length || !rg || x.warm || x.stretch) return null;
+  const [lo, hi] = rg;
+  const top = last.every(z => z.reps >= hi) && last.length >= x.series;
+  const kg = Math.max(0, ...last.map(z => Number(z.kg) || 0));
+  if (kg > 0) {
+    if (top) { const nk = r1(kg + (kg >= 20 ? 2.5 : 1)); return { kg: nk, reps: lo, up: true, msg: `Sube a ${nk} kg: la última vez completaste todas las series con ${kg} kg × ${hi}.` }; }
+    const best = Math.max(...last.map(z => z.reps || 0));
+    return { kg, reps: Math.min(hi, best + 1), msg: `Mantén ${kg} kg e intenta ${Math.min(hi, best + 1)} repeticiones.` };
+  }
+  if (top) return { kg: '', reps: hi + 2, up: true, msg: 'Ya dominas el rango: suma 2 repeticiones o agrega peso.' };
+  return null;
+}
 function beep() {
   try {
     const ac = new (window.AudioContext || window.webkitAudioContext)();
@@ -271,9 +350,10 @@ function startWorkout(dayIdx) {
     ses = {
       dayIdx, start: Date.now(), i: 0,
       sets: dd.exercises.map(x => {
-        const last = lastSets(x.ex);
+        const last = lastSets(x.ex), sg = suggestion(x);
         const reps = parseInt(x.reps, 10) || '';
-        return Array.from({ length: x.series }, (_, k) => ({ kg: last && last[k] ? last[k].kg : '', reps: last && last[k] ? last[k].reps : reps, done: false }));
+        return Array.from({ length: x.series }, (_, k) => sg ? { kg: sg.kg, reps: sg.reps, done: false }
+          : { kg: last && last[k] ? last[k].kg : '', reps: last && last[k] ? last[k].reps : reps, done: false });
       }),
     };
     storeSession(ses);
@@ -301,12 +381,17 @@ function startWorkout(dayIdx) {
       const sets = ses.sets[ses.i];
       const total = ses.sets.flat().length, done = ses.sets.flat().filter(z => z.done).length;
       const last = lastSets(x.ex);
+      const sg = suggestion(x);
+      const pair = x.ss ? dd.exercises.map((y, k) => [y, k]).filter(([y]) => y.ss === x.ss) : [];
       const resting = timer && restEnd > Date.now();
       box.innerHTML = `
         <div class="wk-top"><span class="muted small">${esc(dd.name)} · ejercicio ${ses.i + 1} de ${dd.exercises.length}</span></div>
         <div class="bar" style="margin:6px 0 14px"><span style="width:${done / total * 100}%;background:var(--accent)"></span></div>
+        ${x.warm ? '<div class="wk-badge">🔥 Calentamiento</div>' : ''}
+        ${pair.length === 2 ? `<div class="wk-badge ss">Superserie ${x.ss} · ${pair[0][1] === ses.i ? `luego <b>${esc(exById(pair[1][0].ex).n)}</b>` : `alterna con <b>${esc(exById(pair[0][0].ex).n)}</b>`}</div>` : ''}
         <h2 style="margin:0 0 4px">${esc(e.n)}</h2>
         <div class="muted small">${x.series} × ${esc(x.reps)}${x.rest !== '-' ? ' · descanso ' + esc(x.rest) : ''}${last ? ` · la última vez: ${last.map(z => (z.kg ? z.kg + 'kg×' : '') + z.reps).join(', ')}` : ''}</div>
+        ${sg ? `<div class="hint-box">💡 ${esc(sg.msg)}</div>` : ''}
         <div class="wk-img">${e.img.map(im => `<img src="${EX_IMG_BASE + im}" alt="" onerror="this.style.display='none'">`).join('')}</div>
         ${resting ? `<div class="rest-box"><div class="muted small">Descanso</div><div class="rest-t" id="restT"></div>
           <div class="btn-row" style="justify-content:center"><button class="btn ghost sm" id="rPlus">+15 s</button><button class="btn sm" id="rSkip">Saltar</button></div></div>` : ''}
@@ -338,8 +423,14 @@ function startWorkout(dayIdx) {
           // Al terminar una serie, la siguiente hereda el peso si estaba vacía
           const nx = sets[Number(b.dataset.set) + 1];
           if (nx && nx.kg === '' && z.kg !== '') nx.kg = z.kg;
-          startRest(restSecs(x.rest));
           if (navigator.vibrate) navigator.vibrate(40);
+          // Superserie: tras el primero se pasa al segundo sin descanso; tras el segundo, descanso y vuelta al primero
+          if (pair.length === 2) {
+            const [a, bIdx] = [pair[0][1], pair[1][1]];
+            if (ses.i === a) { keep(); toast('Superserie: ahora ' + exById(pair[1][0].ex).n); return go2(bIdx); }
+            startRest(restSecs(x.rest));
+            if (ses.sets[a].some(q => !q.done)) return go2(a);
+          } else startRest(restSecs(x.rest));
         }
         paint();
       }));
