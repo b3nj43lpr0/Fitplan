@@ -45,8 +45,18 @@ function load() {
   return EMPTY();
 }
 function save() {
+  state._ts = Date.now();
+  persist();
+  if (window.FitSync) window.FitSync.notify();
+}
+function persist() {
   try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) { /* ignorar */ }
 }
+// Puente para sync.js: leer el estado y reemplazarlo con los datos de la nube
+window.__fitplan = {
+  get: () => state,
+  replace(s) { state = { ...EMPTY(), ...s }; persist(); render(); },
+};
 function day(key = currentDate) {
   if (!state.days[key]) state.days[key] = { foods: [], exercises: [], water: 0 };
   return state.days[key];
@@ -1282,6 +1292,7 @@ function viewPerfil() {
             ${state.profile ? '<button class="btn ghost sm" id="resetBtn" style="color:var(--danger)">Borrar todo</button>' : ''}
           </div>
         </div>
+        <div class="card" id="syncCard"></div>
         <div class="card">
           <h2>Créditos</h2>
           <ul class="small credits">
@@ -1294,7 +1305,27 @@ function viewPerfil() {
       </div>
     </div>`;
 }
+function syncCardHtml() {
+  const S = window.FitSync && window.FitSync.state;
+  if (!S || !S.enabled) return `<h2>Sincronización</h2><p class="muted small" style="margin-top:-6px">Aún no está configurada. Mientras tanto, usa Exportar e Importar para pasar tus datos entre dispositivos.</p>`;
+  return `<h2>Sincronización</h2>
+    <p class="muted small" style="margin-top:-6px">${S.user ? `Sesión: <b>${esc(S.user.email || S.user.name || '')}</b>. Tus datos se comparten entre todos tus dispositivos.` : 'Inicia sesión con Google para tener tus datos igual en el PC y en el teléfono.'}</p>
+    <p class="small" id="syncStatus">${esc(S.status)}</p>
+    <div class="btn-row">${S.user ? '<button class="btn ghost sm" id="syncOut">Cerrar sesión</button>' : '<button class="btn sm" id="syncIn">Iniciar sesión con Google</button>'}</div>`;
+}
+let offSync = null;
 bind.perfil = () => {
+  const card = $('#syncCard');
+  const paint = () => {
+    if (!card.isConnected) { if (offSync) offSync(); return; }
+    card.innerHTML = syncCardHtml();
+    const i = $('#syncIn'), o = $('#syncOut');
+    if (i) i.addEventListener('click', () => window.FitSync.signIn());
+    if (o) o.addEventListener('click', () => window.FitSync.signOut());
+  };
+  paint();
+  if (offSync) offSync();
+  if (window.FitSync) offSync = window.FitSync.onChange(paint);
   $('#saveProfile').addEventListener('click', () => {
     const p = {
       ...(state.profile || {}),
@@ -1333,7 +1364,7 @@ bind.perfil = () => {
   });
   const reset = $('#resetBtn');
   if (reset) reset.addEventListener('click', () => {
-    if (!confirm('¿Borrar todos tus datos de este dispositivo?')) return;
+    if (!confirm('¿Borrar todos tus datos? Si tienes la sincronización activa, también se borrarán en tus otros dispositivos.')) return;
     state = EMPTY();
     save(); render();
   });

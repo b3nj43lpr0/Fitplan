@@ -18,6 +18,24 @@ El teléfono necesita abrir la app desde una dirección web. La forma más fáci
 
 Para pasar tus datos del PC al teléfono: Perfil → **Exportar**, y en el otro dispositivo Perfil → **Importar**.
 
+## Publicar gratis y sincronizar (PC + teléfono)
+
+Todo es gratuito y no pide tarjeta.
+
+**1. Publicar con GitHub Pages**
+1. En GitHub: Settings → Pages → Source: **GitHub Actions**.
+2. Cada vez que se suba código a `main`, la app se publica en `https://<tu-usuario>.github.io/<repo>/`.
+3. Abre ese link en el teléfono y elige "Agregar a pantalla de inicio".
+
+**2. Sincronizar con Firebase (plan Spark, sin tarjeta)**
+1. Entra a https://console.firebase.google.com y crea un proyecto. No actives ningún plan de pago.
+2. Authentication → Sign-in method → activa **Google**. En Settings → Authorized domains agrega `<tu-usuario>.github.io`.
+3. Firestore Database → Crear base de datos (modo producción) → pestaña Reglas → pega el contenido de `firestore.rules` → Publicar.
+4. Project settings → Tus apps → Web (`</>`) → copia el bloque `firebaseConfig` y pégalo en `firebase-config.js`.
+5. Sube el cambio. En Perfil → Sincronización, inicia sesión con Google en cada dispositivo.
+
+Los datos se guardan en tu cuenta de Firebase y se actualizan en todos tus dispositivos. La clave de `firebaseConfig` es pública por diseño: la protección son las reglas de `firestore.rules`.
+
 ## Qué tiene
 
 - **Perfil**: calcula metabolismo basal, gasto diario (TDEE), meta de calorías, macros, IMC y agua (fórmula Mifflin-St Jeor). Tipos de dieta: equilibrada, alta en proteína, baja en carbohidratos y vegetariana.

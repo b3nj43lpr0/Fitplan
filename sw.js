@@ -1,6 +1,6 @@
 // Service worker: permite usar la app sin conexión una vez instalada
-const CACHE = 'fitplan-v3';
-const FILES = ['./', './index.html', './styles.css', './app.js', './data.js', './foods.js', './exercises.js', './vendor/zxing.min.js', './manifest.json', './icon.svg'];
+const CACHE = 'fitplan-v4';
+const FILES = ['./', './index.html', './styles.css', './app.js', './sync.js', './firebase-config.js', './data.js', './foods.js', './exercises.js', './vendor/zxing.min.js', './manifest.json', './icon.svg'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)));
