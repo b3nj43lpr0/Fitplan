@@ -267,6 +267,7 @@ function viewHoy() {
     <div class="hello">
       <button class="avatar" id="avatarBtn" aria-label="Cambiar de persona" title="Cambiar de persona">${initial(state.profile.nombre)}</button>
       <div class="who"><div class="greet">${greeting()} 👋</div><div class="name">${esc(state.profile.nombre || 'Hola')}</div></div>
+      <button class="round-btn coach-btn" id="coachBtn" aria-label="Hablar con tu coach" title="Tu coach">💬</button>
       ${streak() ? `<button class="streak" data-go="progreso" title="Días seguidos registrando">🔥 ${streak()}</button>` : ''}
       <button class="round-btn" data-go="perfil" aria-label="Perfil">⚙️</button>
     </div>
@@ -370,6 +371,7 @@ bind.hoy = () => {
   }));
   bindLogRecipe(currentDate);
   $('#avatarBtn').addEventListener('click', openProfiles);
+  $('#coachBtn').addEventListener('click', openCoach);
   $$('[data-prog-tab]').forEach(b => b.addEventListener('click', () => { ui.progTab = b.dataset.progTab; go('progreso'); }));
   $$('[data-check-ch]').forEach(b => b.addEventListener('click', () => {
     const c = state.challenges.find(x => x.id === b.dataset.checkCh && !x.closed);

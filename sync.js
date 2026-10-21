@@ -8,7 +8,7 @@
 // Si las reglas de Firestore aún no permiten la subcolección, se usa el formato antiguo users/{uid}.
 (function () {
   'use strict';
-  const V = '10.12.2';
+  const V = '12.19.0';
   const BASE = `https://www.gstatic.com/firebasejs/${V}/`;
   const cfg = window.FIREBASE_CONFIG;
   const listeners = new Set();
@@ -258,7 +258,7 @@
       ]);
       const a = app.initializeApp(cfg);
       fb = {
-        auth: auth.getAuth(a), db: fs.getFirestore(a), doc: fs.doc, collection: fs.collection, getDoc: fs.getDoc, getDocs: fs.getDocs,
+        app: a, auth: auth.getAuth(a), db: fs.getFirestore(a), doc: fs.doc, collection: fs.collection, getDoc: fs.getDoc, getDocs: fs.getDocs,
         setDoc: fs.setDoc, onSnapshot: fs.onSnapshot, runTransaction: fs.runTransaction,
         GoogleAuthProvider: auth.GoogleAuthProvider, signInWithPopup: auth.signInWithPopup, signOut: auth.signOut,
       };
@@ -271,6 +271,32 @@
   }
   window.addEventListener('online', () => { if (uid) schedulePush(); });
 
+  // ---------- Coach con IA (Gemini mediante Firebase AI Logic, nivel gratuito) ----------
+  // Se prueban modelos en orden por si alguno deja de estar disponible en el nivel gratis
+  const AI_MODELS = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-flash-latest'];
+  let aiMod = null;
+  async function ask({ history = [], message, system, onChunk }) {
+    if (!fb || !fb.app) { const e = new Error('offline'); e.code = 'offline'; throw e; }
+    if (!S.user) { const e = new Error('auth'); e.code = 'auth'; throw e; }
+    aiMod = aiMod || await import(BASE + 'firebase-ai.js');
+    const ai = aiMod.getAI(fb.app, { backend: new aiMod.GoogleAIBackend() });
+    let lastErr = null;
+    for (const model of AI_MODELS) {
+      try {
+        const gm = aiMod.getGenerativeModel(ai, { model, systemInstruction: system });
+        const chat = gm.startChat({ history: history.map(h => ({ role: h.role === 'user' ? 'user' : 'model', parts: [{ text: h.text }] })) });
+        const res = await chat.sendMessageStream(message);
+        let full = '';
+        for await (const ch of res.stream) { full += ch.text(); if (onChunk) onChunk(full); }
+        return full;
+      } catch (e) {
+        lastErr = e;
+        if (!/not found|404|not supported|unsupported model/i.test(String(e && e.message))) break;
+      }
+    }
+    throw lastErr;
+  }
+
   window.FitSync = {
     state: S,
     onChange(f) { listeners.add(f); return () => listeners.delete(f); },
@@ -281,6 +307,7 @@
       catch (e) { set({ status: 'No se pudo iniciar sesión' }); }
     },
     async signOut() { if (fb) await fb.signOut(fb.auth); },
+    ask,
     _test: { inject: f => { fb = f; }, start, push, getSynced: () => synced },
   };
   init();

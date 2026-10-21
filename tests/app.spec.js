@@ -464,3 +464,45 @@ test('Varias personas en el mismo teléfono', async ({ page }) => {
   expect((await page.evaluate(() => profilesIndex())).list).toHaveLength(1);
   expect(await page.evaluate(() => Object.keys(localStorage).filter(k => k.startsWith('fitplan-v1-')))).toEqual([]);
 });
+
+test('Coach: chat con IA (simulada), contexto sin datos personales y coach básico de respaldo', async ({ page }) => {
+  // IA simulada: devuelve la respuesta por partes, como la real
+  await page.evaluate(() => {
+    window.__asked = [];
+    window.FitSync.ask = async ({ message, history, system, onChunk }) => {
+      window.__asked.push({ message, history, system });
+      const txt = '**¡Bien hecho!** Registraste todos los días.\n- Sube la proteína en el desayuno.';
+      onChunk(txt.slice(0, 10)); await new Promise(r => setTimeout(r, 50)); onChunk(txt);
+      return txt;
+    };
+  });
+  await page.click('#coachBtn');
+  await expect(page.locator('.coach-log .msg.model').first()).toContainText('Conozco tus registros');
+  await page.click('[data-q=bien]');
+  await expect(page.locator('.msg.model').last()).toContainText('¡Bien hecho!');
+  await expect(page.locator('.msg.model b').last()).toHaveText('¡Bien hecho!');
+  // El mensaje lleva los datos, pero no el nombre de la persona
+  const asked = await page.evaluate(() => window.__asked[0]);
+  expect(asked.message).toContain('Metas diarias');
+  expect(asked.message).toContain('Últimos 7 días');
+  expect(asked.message).not.toContain('Benja');
+  expect(asked.system).toContain('español de Chile');
+  // Pregunta escrita: el historial anterior viaja con ella
+  await page.fill('#cMsg', '¿Qué ceno hoy?');
+  await page.press('#cMsg', 'Enter');
+  await expect(page.locator('.msg.user').last()).toHaveText('¿Qué ceno hoy?');
+  expect(await page.evaluate(() => window.__asked[1].history.length)).toBe(2);
+  // Mientras responde no se puede mandar otra pregunta
+  await expect(page.locator('[data-q=mejorar]')).toBeDisabled();
+  await expect(page.locator('.msg.model').last()).toContainText('Sube la proteína');
+  await expect(page.locator('.msg.model')).toHaveCount(2); // el saludo inicial se reemplaza por la conversación
+  await expect(page.locator('[data-q=mejorar]')).toBeEnabled();
+  // Si la IA falla (por ejemplo, sin iniciar sesión), responde el coach básico
+  await page.evaluate(() => { window.FitSync.ask = async () => { const e = new Error('auth'); e.code = 'auth'; throw e; }; });
+  await page.click('[data-q=mejorar]');
+  await expect(page.locator('.msg.model').last()).toContainText('inicia sesión con Google');
+  // El chat queda guardado en el teléfono
+  expect(await page.evaluate(() => coachLog().length)).toBe(6);
+  const basic = await page.evaluate(() => basicCoach('semana'));
+  expect(basic.some(x => x.startsWith('✅')) || basic.some(x => x.startsWith('💡'))).toBe(true);
+});

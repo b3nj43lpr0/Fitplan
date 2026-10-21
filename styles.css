@@ -724,3 +724,24 @@ button.avatar { border: 0; cursor: pointer; font-family: inherit; }
 .prof-row { width: 100%; border: 0; background: none; text-align: left; cursor: pointer; color: var(--text); font: inherit; border-radius: 12px; padding-left: 6px; padding-right: 6px; }
 .prof-row:hover { background: var(--soft); }
 .prof-row.on { background: var(--accent-soft); }
+
+/* ---------- Coach ---------- */
+.coach-btn { width: 44px; height: 44px; }
+.modal.coach-modal { display: flex; flex-direction: column; height: min(86vh, 760px); }
+.coach { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.coach-head { display: flex; align-items: center; gap: 10px; padding-right: 30px; margin-bottom: 10px; }
+.coach-ava { width: 42px; height: 42px; border-radius: 50%; background: linear-gradient(135deg, var(--accent), var(--accent-2)); display: grid; place-items: center; font-size: 22px; flex-shrink: 0; }
+.coach-log { flex: 1; min-height: 120px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding: 4px 2px 8px; }
+.msg { max-width: 88%; padding: 10px 13px; border-radius: 18px; font-size: 14.5px; line-height: 1.45; animation: rise .25s ease both; }
+.msg.user { align-self: flex-end; background: var(--accent); color: #fff; border-bottom-right-radius: 6px; }
+.msg.model { align-self: flex-start; background: var(--soft); border-bottom-left-radius: 6px; }
+.msg.typing { display: flex; gap: 4px; padding: 14px; }
+.msg.typing span { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); animation: blink 1s infinite; }
+.msg.typing span:nth-child(2) { animation-delay: .15s; }
+.msg.typing span:nth-child(3) { animation-delay: .3s; }
+@keyframes blink { 0%, 100% { opacity: .25; } 50% { opacity: 1; } }
+.coach-quick { margin: 6px 0 8px; }
+.coach-input { display: flex; gap: 8px; }
+.coach-input input { flex: 1; }
+.coach-input .btn { padding: 0 18px; }
+.coach-foot { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 8px; }
