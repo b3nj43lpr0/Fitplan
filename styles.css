@@ -431,3 +431,5 @@ a.btn { display: inline-block; text-decoration: none; }
 .wk-nav-btns .btn { flex: 1; }
 .wk-info { margin: 12px 0 8px; }
 .wk-info summary { cursor: pointer; color: var(--accent); font-weight: 600; }
+textarea { width: 100%; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--soft); color: var(--text); font: inherit; resize: vertical; }
+textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; background: var(--card); }

@@ -40,11 +40,11 @@ Los datos se guardan en tu cuenta de Firebase y se actualizan en todos tus dispo
 
 - **Perfil**: calcula metabolismo basal, gasto diario (TDEE), meta de calorías, macros, IMC y agua (fórmula Mifflin-St Jeor). Tipos de dieta: equilibrada, alta en proteína, baja en carbohidratos y vegetariana.
 - **Hoy**: meta, consumidas, quemadas y restantes; macros; agua; gráfico de 7 días; lo que dice tu plan semanal para hoy.
-- **Comidas**: 266 alimentos en español con calorías y macros (USDA) y porción típica. Escáner de código de barras con la cámara (Open Food Facts, necesita internet). Alimentos propios y registro rápido.
-- **Ejercicio**: 22 actividades; calcula calorías quemadas según tu peso y minutos.
-- **Recetas**: 32 recetas con calorías calculadas y botón de video en YouTube; sugerencias según lo que te queda del día; plan semanal automático (puedes cambiar cada comida) y lista de compras con casillas.
-- **Rutinas**: rutina semanal según objetivo, nivel, días, minutos y lugar (casa sin equipo, casa con mancuernas o bandas, gimnasio). Biblioteca de 650 ejercicios con imágenes, músculos, técnica, consejos y video. Puedes cambiar cualquier ejercicio por otro parecido.
-- **Progreso**: registro de peso con gráfico y promedio de 7 días, ritmo semanal, ajuste automático de la meta de calorías, medidas corporales y % de grasa estimado.
+- **Comidas**: 362 alimentos en español con calorías, macros y porción típica (USDA, más platos chilenos y latinos con valores aproximados). Favoritas, recientes y agregado con un toque. Escáner de código de barras con la cámara (Open Food Facts, necesita internet). Alimentos propios y registro rápido.
+- **Ejercicio**: 44 actividades; calcula calorías quemadas según tu peso y minutos.
+- **Recetas**: 60 recetas con calorías calculadas, recetas propias con calculadora de ingredientes y botón de video en YouTube; sugerencias según lo que te queda del día; plan semanal automático (puedes cambiar cada comida) y lista de compras con casillas para copiar o compartir por WhatsApp.
+- **Rutinas**: rutina semanal según objetivo, nivel, días, minutos y lugar (casa sin equipo, casa con mancuernas o bandas, gimnasio). Biblioteca de 650 ejercicios con imágenes, músculos, técnica, consejos y video. Puedes cambiar cualquier ejercicio por otro parecido. Modo entrenamiento con registro de series, peso y temporizador de descanso.
+- **Progreso**: registro de peso con gráfico y promedio de 7 días, ritmo semanal, ajuste automático de la meta de calorías, medidas corporales, % de grasa estimado e historial de fuerza (1RM estimado y récords).
 
 ## Archivos
 
