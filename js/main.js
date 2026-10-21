@@ -43,5 +43,13 @@ syncProfileName();
 render();
 animateEnter();
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
-  navigator.serviceWorker.register('sw.js').catch(() => {});
+  // Si ya había una versión instalada y llega una nueva, se recarga una vez para mostrarla
+  const hadController = !!navigator.serviceWorker.controller;
+  let reloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController || reloaded || $('.modal-back')) return;
+    reloaded = true;
+    location.reload();
+  });
+  navigator.serviceWorker.register('sw.js').then(reg => reg.update()).catch(() => {});
 }

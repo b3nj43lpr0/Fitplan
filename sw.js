@@ -1,5 +1,5 @@
 // Service worker: permite usar la app sin conexión una vez instalada
-const CACHE = 'fitplan-v19';
+const CACHE = 'fitplan-v20';
 // Imágenes de ejercicios, librería de Firebase y fuentes: no cambian, así que viven en su propia caché
 // y sobreviven a las actualizaciones de la app
 const STATIC = 'fitplan-static-v1';
@@ -28,7 +28,8 @@ function networkFirst(req, cacheName) {
     let done = false;
     const fallback = () => c.match(req, { ignoreSearch: req.mode === 'navigate' }).then(hit => { if (hit && !done) { done = true; resolve(hit); } return hit; });
     const timer = setTimeout(fallback, 3000);
-    fetch(req).then(res => {
+    // no-cache: pregunta siempre al servidor si hay versión nueva (GitHub Pages deja los archivos 10 min en la caché del navegador)
+    fetch(req, { cache: 'no-cache' }).then(res => {
       clearTimeout(timer);
       if (res.ok) c.put(req, res.clone());
       if (!done) { done = true; resolve(res); }
