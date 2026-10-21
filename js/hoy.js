@@ -38,6 +38,8 @@ function nudges(d, tg) {
   if (h >= 21 && !has('cena')) out.push({ id: 'cena', ico: '🥗', txt: 'Falta la cena de hoy.', act: 'meal:cena', btn: 'Registrar' });
   const expected = Math.floor(tg.water * Math.min(1, Math.max(0, (h - 8) / 13)));
   if (d.water < expected - 1) out.push({ id: 'agua', ico: '💧', txt: `Vas ${d.water} de ${tg.water} vasos de agua. ¡Toma uno ahora!`, act: 'water', btn: '+1 vaso' });
+  const t = totals(d), dg = dayGoals(tg, t.burned);
+  if (h >= 17 && d.foods.length && t.p < dg.prot * 0.6) out.push({ id: 'prot', ico: '🥩', txt: `Te faltan ${r0(dg.prot - t.p)} g de proteína para tu meta de hoy.`, act: 'prot', btn: 'Ideas' });
   const r = state.routine;
   if (r && h >= 16 && !d.exercises.length && r.days.some(x => !x.done)) {
     const i = r.days.findIndex(x => !x.done);
@@ -49,6 +51,7 @@ function viewHoy() {
   const tg = calcTargets();
   const d = peekDay(currentDate);
   const t = totals(d);
+  const dg = dayGoals(tg, t.burned);
   const budget = tg.kcal + t.burned;
   const left = budget - t.kcal;
   const over = left < 0;
@@ -122,10 +125,11 @@ function viewHoy() {
     </div>
     <div class="card">
       <div class="row"><h2>Macros del día</h2><button class="see" data-go="recetas">Ver recetas ›</button></div>
+      ${dg.train ? `<p class="muted small" style="margin:-4px 0 6px">💪 Día de entrenamiento: tu meta sube ${r0(dg.carb - tg.carb)} g de carbohidratos para recuperarte.</p>` : ''}
       <div class="rings3">
-        ${macroRing('Proteína', t.p, tg.prot, 'var(--prot)')}
-        ${macroRing('Carbos', t.c, tg.carb, 'var(--carb)')}
-        ${macroRing('Grasas', t.g, tg.fat, 'var(--fat)')}
+        ${macroRing('Proteína', t.p, dg.prot, 'var(--prot)')}
+        ${macroRing('Carbos', t.c, dg.carb, 'var(--carb)')}
+        ${macroRing('Grasas', t.g, dg.fat, 'var(--fat)')}
       </div>
     </div>
     <div class="grid g2">
@@ -194,6 +198,7 @@ bind.hoy = () => {
     const [kind, arg] = b.dataset.nudge.split(':');
     if (kind === 'meal') { ui.meal = arg; go('comidas'); }
     if (kind === 'water') { day().water++; tap(); save(); render(); toast('💧 ¡Bien!'); }
+    if (kind === 'prot') { ui.recipeTab = 'recetas'; ui.recipeTag = 'alta-proteina'; ui.recipeType = 'todas'; go('recetas'); }
     if (kind === 'train') { ui.rutTab = 'rutina'; go('rutinas'); startWorkout(Number(arg)); }
   }));
   bindLogRecipe(currentDate);

@@ -11,6 +11,7 @@ module.exports = defineConfig({
     baseURL: 'http://localhost:8765',
     viewport: { width: 390, height: 844 },
     hasTouch: true,
+    actionTimeout: 10000,
     // En entornos con Chromium ya instalado se puede indicar su ruta
     launchOptions: process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {},
   },

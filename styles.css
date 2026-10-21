@@ -651,3 +651,10 @@ body:has(.modal-back) .toast { bottom: auto; top: calc(16px + env(safe-area-inse
 .week-top > div { flex: 1; min-width: 0; }
 .day-hint { margin: 6px 0 0; }
 @media (max-width: 440px) { .tabs button { padding: 9px 6px; font-size: 13px; } }
+
+/* ---------- Rutinas más completas ---------- */
+.ex-thumb.ex-ph { display: grid; place-items: center; font-size: 22px; background: var(--soft); }
+.tag.ss { background: color-mix(in srgb, var(--burn) 15%, transparent); color: var(--burn); }
+.wk-badge { display: inline-block; font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 99px; background: var(--soft); margin-bottom: 8px; }
+.wk-badge.ss { background: color-mix(in srgb, var(--burn) 15%, transparent); color: var(--burn); }
+.hint-box { background: var(--accent-soft); color: var(--text); border-radius: 12px; padding: 10px 12px; font-size: 14px; margin: 10px 0; }

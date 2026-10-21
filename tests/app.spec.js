@@ -95,6 +95,9 @@ test('Entrenar: rutina, entrenamiento completo, actividad y biblioteca', async (
   await page.click('[data-view=rutinas]');
   await page.click('#genRoutine');
   await page.click('[data-start="0"]');
+  // Primero viene el calentamiento (sin descanso); se salta hasta el primer ejercicio de fuerza
+  const warm = (await state(page)).routine.days[0].exercises.filter(x => x.warm).length;
+  for (let i = 0; i < warm; i++) await page.click('#wNext');
   await page.fill('[data-kg="0"]', '50');
   await page.click('[data-set="0"]');
   await page.click('#rSkip');
@@ -103,7 +106,7 @@ test('Entrenar: rutina, entrenamiento completo, actividad y biblioteca', async (
   await page.click('#okW');
   const s = await state(page);
   expect(s.routine.days[0].done).toBe(true);
-  expect(s.workouts.at(-1).ex[0].sets[0].kg).toBe(50);
+  expect(s.workouts.at(-1).ex.find(x => x.sets.some(z => z.kg === 50))).toBeTruthy();
   await page.click('[data-toggle-day="2"]');
   await expect(page.locator('[data-start="2"]')).toBeVisible();
   await page.click('[data-tab-rut=actividad]');
@@ -145,4 +148,58 @@ test('carga liviana: no descarga ejercicios ni lector al abrir', async ({ page }
   await page.reload();
   await page.waitForTimeout(500);
   expect(urls.some(u => /exercises\.js|zxing/.test(u))).toBe(false);
+});
+
+test('Entrenar: calentamiento, superseries, progresión y ejercicio propio', async ({ page }) => {
+  await page.click('[data-view=rutinas]');
+  await page.selectOption('#rNivel', 'intermedio');
+  await page.click('#genRoutine');
+  const r = (await state(page)).routine;
+  expect(r.days.every(d => d.exercises[0].warm)).toBe(true);
+  expect(r.days.some(d => d.exercises.some(x => x.ss))).toBe(true);
+  // Progresión: todas las series en el tope del rango → sube el peso
+  const sg = await page.evaluate(() => {
+    state.workouts.push({ id: 'wx', d: todayKey(), name: 'x', minutes: 40, ex: [{ id: 'bench-press', sets: [{ kg: 60, reps: 10 }, { kg: 60, reps: 10 }] }] });
+    return [suggestion({ ex: 'bench-press', series: 2, reps: '8-10' }), suggestion({ ex: 'bench-press', series: 2, reps: '8-12' })];
+  });
+  expect(sg[0]).toMatchObject({ kg: 62.5, reps: 8, up: true });
+  expect(sg[1]).toMatchObject({ kg: 60, reps: 11 });
+  // Superserie: tras una serie del primero pasa al segundo
+  const di = r.days.findIndex(d => d.exercises.some(x => x.ss));
+  const first = r.days[di].exercises.findIndex(x => x.ss);
+  if (!(await page.locator(`[data-start="${di}"]`).count())) await page.click(`[data-toggle-day="${di}"]`);
+  await page.click(`[data-start="${di}"]`);
+  for (let i = 0; i < first; i++) await page.click('#wNext');
+  await page.click('[data-set="0"]');
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('fitplan-session')).i)).toBe(first + 1);
+  await page.click('#wQuit');
+  // Ejercicio propio
+  await page.click('[data-tab-rut=biblioteca]');
+  await page.click('#newEx');
+  await page.fill('#ceName', 'Remo máquina azul');
+  await page.click('#ceSave');
+  await page.fill('#exSearch', 'azul');
+  await expect(page.locator('.ex-card')).toHaveCount(1);
+});
+
+test('Metas inteligentes: carbos en días de entreno, aviso de proteína y plan con entrenos', async ({ page }) => {
+  // Día con ejercicio: la meta de carbos sube
+  const g = await page.evaluate(() => { const tg = calcTargets(); return [tg.carb, dayGoals(tg, 400).carb, dayGoals(tg, 0).carb]; });
+  expect(g[1]).toBeCloseTo(g[0] + 70, 0);
+  expect(g[2]).toBe(g[0]);
+  await page.click('[data-view=rutinas]');
+  await page.click('#genRoutine');
+  await page.click('[data-view=recetas]');
+  await page.click('[data-tab-rec=plan]');
+  await page.click('#genPlan');
+  const plan = (await state(page)).plan;
+  expect(plan.days.filter(d => d.train)).toHaveLength(3);
+  await expect(page.locator('.tag', { hasText: 'entreno' }).first()).toBeVisible();
+  // Aviso de proteína (forzamos la hora de la tarde)
+  const n = await page.evaluate(() => {
+    const H = Date.prototype.getHours; Date.prototype.getHours = () => 19;
+    try { return nudges({ foods: [{ meal: 'almuerzo', kcal: 500, p: 5, c: 50, g: 10 }], exercises: [], water: 20 }, calcTargets()).map(x => x.id); }
+    finally { Date.prototype.getHours = H; }
+  });
+  expect(n).toContain('prot');
 });
