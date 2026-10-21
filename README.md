@@ -57,6 +57,10 @@ Los datos se guardan en tu cuenta de Firebase y se actualizan en todos tus dispo
 - **Resumen semanal** automático el primer día que abres la app en la semana, con una sugerencia concreta.
 - **Desafíos de 30 días**: proteína, agua, registro, déficit, entrenamientos, pasos, sin bebidas azucaradas y sueño.
 
+## Varias personas en el mismo teléfono
+
+Toca tu inicial en Hoy (o Perfil → Personas en este teléfono) para agregar a alguien o cambiar de persona. Cada una tiene sus propias comidas, rutina, progreso, entrenamiento en curso y fotos. Con la sincronización, cada perfil se guarda en su propio espacio dentro de la misma cuenta de Google.
+
 ## Sin señal y accesos directos
 
 - La app abre sin internet y, si la señal es mala, no espera más de 3 segundos antes de usar lo guardado.

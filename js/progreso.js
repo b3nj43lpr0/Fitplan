@@ -123,7 +123,7 @@ function badgesCard() {
 // ---------- Fotos de progreso (IndexedDB, solo en este dispositivo) ----------
 function photoDb() {
   return new Promise((ok, fail) => {
-    const rq = indexedDB.open('fitplan-photos', 1);
+    const rq = indexedDB.open(pkey('fitplan-photos'), 1);
     rq.onupgradeneeded = () => rq.result.createObjectStore('photos', { keyPath: 'id' });
     rq.onsuccess = () => ok(rq.result);
     rq.onerror = () => fail(rq.error);

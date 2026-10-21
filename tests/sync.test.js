@@ -34,12 +34,12 @@ function fakeFb() {
     onSnapshot: (c, cb) => { if (c.prefix) { const l = { prefix: c.prefix, cb }; listeners.push(l); return () => listeners.splice(listeners.indexOf(l), 1); } return () => {}; },
   };
 }
-function device(name, initial) {
+function device(name, initial, profileId) {
   const store = {};
   let state = JSON.parse(JSON.stringify(initial));
   const win = {
     FIREBASE_CONFIG: null,
-    __fitplan: { get: () => state, replace: s => { state = { days: {}, workouts: [], ...s }; } },
+    __fitplan: { profileId, get: () => state, replace: s => { state = { days: {}, workouts: [], ...s }; } },
     addEventListener: () => {},
   };
   const ctx = { window: win, localStorage: { getItem: k => store[k] ?? null, setItem: (k, v) => { store[k] = String(v); } }, setTimeout, clearTimeout, console, Math, JSON, Date };
@@ -95,6 +95,12 @@ const ok = (c, msg) => { console.log((c ? 'OK  ' : 'FAIL') + ' ' + msg); if (!c)
   // Reabrir A (ya tiene registro de sincronización)
   const A2store = A.store;
   ok(Object.keys(JSON.parse(A2store['fitplan-sync2-u1'])).length > 3, 'A guarda el registro de sincronización');
+  // Otro perfil del mismo teléfono con la misma cuenta: espacio propio, sin mezclar datos
+  const P2 = device('P2', { profile: { nombre: 'Sofía' }, days: { '2026-10-21': { foods: [{ id: 's1', kcal: 222 }], exercises: [], water: 2 } }, workouts: [], _ts: 5 }, 'p2');
+  await P2.api._test.start({ uid: 'u1' }); await sleep(30);
+  ok(P2.state.profile.nombre === 'Sofía' && !P2.state.days['2026-10-20'], 'perfil 2 no recibe los datos del perfil 1');
+  ok(Object.keys(DB).some(k => k.startsWith('users/u1/parts_p2/')), 'perfil 2 guarda en su propia colección');
+  ok(A.state.profile.nombre === 'Benjamín' && !A.state.days['2026-10-21'].foods.some(f => f.id === 's1'), 'perfil 1 no recibe los datos del perfil 2');
   // Modo antiguo si las reglas no permiten la subcolección
   denyParts = true;
   const C = device('C', { profile: { nombre: 'X' }, days: {}, workouts: [], _ts: 0 });

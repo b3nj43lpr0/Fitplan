@@ -2,7 +2,17 @@
 'use strict';
 
 // ---------- Estado y almacenamiento ----------
-const STORE_KEY = 'fitplan-v1';
+// ---------- Perfiles en el mismo teléfono ----------
+// El primer perfil ("p1") usa las claves de siempre; los demás les agregan su id, así nada se mezcla
+const PROFILES_KEY = 'fitplan-profiles';
+function profilesIndex() {
+  try { const x = JSON.parse(localStorage.getItem(PROFILES_KEY)); if (x && x.list && x.list.length) return x; } catch (e) { /* sin datos */ }
+  return { active: 'p1', list: [{ id: 'p1', name: '' }] };
+}
+function storeProfiles(x) { try { localStorage.setItem(PROFILES_KEY, JSON.stringify(x)); } catch (e) { /* ignorar */ } }
+const PROFILE_ID = profilesIndex().active;
+const pkey = (k, id = PROFILE_ID) => id === 'p1' ? k : k + '-' + id;
+const STORE_KEY = pkey('fitplan-v1');
 const MEALS = [
   { id: 'desayuno', name: 'Desayuno', share: 0.25 },
   { id: 'almuerzo', name: 'Almuerzo', share: 0.35 },
@@ -83,6 +93,7 @@ function persist() {
 }
 // Puente para sync.js: leer el estado y reemplazarlo con los datos de la nube
 window.__fitplan = {
+  profileId: PROFILE_ID,
   get: () => state,
   replace(s) { state = { ...EMPTY(), ...s }; persist(); render(); },
 };
@@ -173,6 +184,52 @@ function recipeIcon(rec) {
   if (byName) return byName;
   const main = [...rec.ing].sort((a, b) => b[1] - a[1]).map(([id]) => foodById(id)).find(f => f && !/agua|aceite|leche descremada/i.test(f.name));
   return main ? foodIcon(main) : '🍽️';
+}
+const initial = n => esc((n || '?').trim().charAt(0).toUpperCase() || '?');
+// Selector de perfiles (se abre tocando la inicial en Hoy)
+function openProfiles() {
+  const x = profilesIndex();
+  openModal(`<h2>¿Quién usa la app?</h2>
+    <p class="muted small" style="margin-top:-6px">Cada persona tiene sus propias comidas, rutina, progreso y fotos.</p>
+    <div class="list">${x.list.map(p => `<button class="item prof-row ${p.id === PROFILE_ID ? 'on' : ''}" data-switch="${p.id}">
+      <span class="avatar sm">${initial(p.name)}</span><span class="info"><span class="name">${esc(p.name || 'Sin nombre')}</span></span>${p.id === PROFILE_ID ? '<span class="ok-badge">✓ en uso</span>' : '<span class="muted small">cambiar ›</span>'}</button>`).join('')}</div>
+    <div class="field" style="margin-top:12px"><label for="newProf">Agregar persona</label><input id="newProf" placeholder="Nombre"></div>
+    <button class="btn" id="addProf" style="width:100%">＋ Agregar y cambiar</button>`, m => {
+    m.querySelectorAll('[data-switch]').forEach(b => b.addEventListener('click', () => { if (b.dataset.switch !== PROFILE_ID) switchProfile(b.dataset.switch); else closeModal(); }));
+    m.querySelector('#addProf').addEventListener('click', () => {
+      const name = m.querySelector('#newProf').value.trim();
+      if (!name) return toast('Escribe un nombre');
+      addProfile(name);
+    });
+  });
+}
+function switchProfile(id) {
+  persist();
+  const x = profilesIndex();
+  x.active = id; storeProfiles(x);
+  location.reload();
+}
+function addProfile(name) {
+  const x = profilesIndex();
+  const id = 'p' + uid();
+  x.list.push({ id, name });
+  storeProfiles(x);
+  switchProfile(id);
+}
+function deleteProfile(id) {
+  if (id === PROFILE_ID) return;
+  const x = profilesIndex();
+  x.list = x.list.filter(p => p.id !== id);
+  storeProfiles(x);
+  ['fitplan-v1', 'fitplan-session', 'fitplan-cardio'].forEach(k => { try { localStorage.removeItem(pkey(k, id)); } catch (e) { /* ignorar */ } });
+  try { indexedDB.deleteDatabase(pkey('fitplan-photos', id)); } catch (e) { /* ignorar */ }
+}
+// Mantiene el nombre del perfil al día en la lista
+function syncProfileName() {
+  if (!state.profile) return; // un perfil recién creado conserva el nombre con que se agregó
+  const x = profilesIndex(), me = x.list.find(p => p.id === PROFILE_ID);
+  const name = state.profile.nombre || '';
+  if (me && me.name !== name) { me.name = name; storeProfiles(x); }
 }
 function allRecipes() { return [...RECIPES, ...state.customRecipes]; }
 function allFoods() { return [...FOODS, ...state.customFoods]; }

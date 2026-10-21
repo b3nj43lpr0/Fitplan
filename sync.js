@@ -14,6 +14,9 @@
   const listeners = new Set();
   const S = { enabled: !!cfg, user: null, status: cfg ? 'Sin iniciar sesión' : 'No configurada' };
   let fb = null, uid = null, legacy = false, pushTimer = null, applying = false, unsubs = [], synced = {};
+  // Cada perfil del teléfono sincroniza en su propia colección: el primero en "parts", los demás en "parts_<id>"
+  const pid = () => (window.__fitplan && window.__fitplan.profileId) || 'p1';
+  const partsCol = () => pid() === 'p1' ? 'parts' : 'parts_' + pid();
 
   function emit() { listeners.forEach(f => { try { f(S); } catch (e) { /* ignorar */ } }); }
   function set(patch) { Object.assign(S, patch); emit(); }
@@ -58,7 +61,7 @@
       st.workouts.sort((a, b) => (a.d < b.d ? -1 : 1));
     }
   }
-  const syncKey = () => 'fitplan-sync2-' + uid;
+  const syncKey = () => 'fitplan-sync2-' + uid + (pid() === 'p1' ? '' : '-' + pid());
   function loadSynced() { try { return JSON.parse(localStorage.getItem(syncKey())); } catch (e) { return null; } }
   function storeSynced() { try { localStorage.setItem(syncKey(), JSON.stringify(synced)); } catch (e) { /* ignorar */ } }
   function replaceState(st) { applying = true; try { window.__fitplan.replace(st); } finally { applying = false; } }
@@ -118,7 +121,7 @@
 
   // ---------- Enviar ----------
   async function pushDoc(docId, cur) {
-    const ref = fb.doc(fb.db, 'users', uid, 'parts', docId);
+    const ref = fb.doc(fb.db, 'users', uid, partsCol(), docId);
     let final = null;
     await fb.runTransaction(fb.db, async tx => {
       const snap = await tx.get(ref);
@@ -167,12 +170,16 @@
   async function start(user) {
     uid = user.uid;
     legacy = false;
-    const col = fb.collection(fb.db, 'users', uid, 'parts');
+    const col = fb.collection(fb.db, 'users', uid, partsCol());
     let parts;
     try {
       parts = await fb.getDocs(col);
     } catch (e) {
-      if (e && e.code === 'permission-denied') return startLegacy();
+      if (e && e.code === 'permission-denied') {
+        if (pid() === 'p1') return startLegacy();
+        set({ status: 'Para sincronizar este perfil, actualiza las reglas de Firestore' });
+        return;
+      }
       set({ status: 'Sin conexión' });
       setTimeout(() => { if (uid === user.uid && !unsubs.length) start(user); }, 30000);
       return;
@@ -191,7 +198,7 @@
         if (parts.size) {
           remote = { days: {}, workouts: [] };
           for (const u of Object.keys(remoteUnits)) { applyUnit(remote, u, remoteUnits[u]); synced[u] = [hv(remoteUnits[u]), where[u]]; }
-        } else {
+        } else if (pid() === 'p1') {
           const old = await fb.getDoc(fb.doc(fb.db, 'users', uid));
           if (old.exists()) remote = JSON.parse(old.data().data);
         }
