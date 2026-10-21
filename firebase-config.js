@@ -1,12 +1,10 @@
 // Configuración pública de Firebase (plan gratuito Spark).
-// Pega aquí el bloque firebaseConfig de tu proyecto; mientras esté en null, la sincronización queda desactivada.
-// Estas claves no son secretas: la seguridad la dan las reglas de Firestore (ver README).
-window.FIREBASE_CONFIG = null;
-/* Ejemplo:
+// Estas claves no son secretas: la seguridad la dan las reglas de Firestore (ver firestore.rules).
 window.FIREBASE_CONFIG = {
-  apiKey: '...',
-  authDomain: 'tu-proyecto.firebaseapp.com',
-  projectId: 'tu-proyecto',
-  appId: '...',
+  apiKey: 'AIzaSyDpcsj1USvQm8sko_5wySxEDRUqHjOP5M0',
+  authDomain: 'fitplan-43d9a.firebaseapp.com',
+  projectId: 'fitplan-43d9a',
+  storageBucket: 'fitplan-43d9a.firebasestorage.app',
+  messagingSenderId: '692660806064',
+  appId: '1:692660806064:web:b71dbac90e36f665ffb675',
 };
-*/
