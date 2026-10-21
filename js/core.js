@@ -34,7 +34,7 @@ const DIETS = {
   lowcarb: { label: 'Baja en carbohidratos', fatPct: 0.45 },
   vegetariana: { label: 'Vegetariana', fatPct: 0.25 },
 };
-const EMPTY = () => ({ profile: null, days: {}, customFoods: [], routine: null, weights: [], measures: [], plan: null, ajuste: 0, lastAdjust: null, favFoods: [], workouts: [], customRecipes: [], badges: [], customExercises: [], challenges: [], dietBreak: null, weeklySeen: null });
+const EMPTY = () => ({ profile: null, days: {}, customFoods: [], routine: null, weights: [], measures: [], plan: null, ajuste: 0, lastAdjust: null, favFoods: [], workouts: [], customRecipes: [], badges: [], customExercises: [], challenges: [], dietBreak: null, weeklySeen: null, combos: [], fasting: null });
 
 // ---------- Tema (se guarda por dispositivo) ----------
 const THEME_KEY = 'fitplan-theme';
@@ -286,6 +286,7 @@ const BADGES = [
   } },
   { id: 'chef', ico: '👩‍🍳', name: 'Chef', desc: 'Crea tu primera receta', test: () => state.customRecipes.length >= 1 },
   { id: 'plan', ico: '🗓️', name: 'Organizado', desc: 'Genera un plan semanal de comidas', test: () => !!state.plan },
+  { id: 'ayuno', ico: '⏱️', name: 'Disciplina', desc: 'Completa 5 ayunos', test: () => !!(state.fasting && state.fasting.log.filter(f => f.ok).length >= 5) },
   { id: 'desafio', ico: '🥇', name: 'Desafío cumplido', desc: 'Completa un desafío de 30 días', test: () => state.challenges.some(c => c.won) },
   { id: 'meta', ico: '🏁', name: '¡Meta alcanzada!', desc: 'Llega a tu peso meta', test: () => { const p = state.profile; return !!(p && p.meta && state.weights.length > 1 && (p.objetivo === 'ganar' ? currentWeight() >= p.meta : currentWeight() <= p.meta)); } },
 ];

@@ -2,7 +2,7 @@
 'use strict';
 
 // ---------- Vista: Comidas ----------
-const FAV = '⭐ Favoritas', RECENT = '🕒 Recientes';
+const FAV = '⭐ Favoritas', RECENT = '🕒 Recientes', COMBOS = '🍱 Combos';
 function isFav(id) { return state.favFoods.includes(id); }
 // Alimentos registrados últimamente, del más reciente al más antiguo
 function recentFoodIds(max = 40) {
@@ -23,7 +23,42 @@ function addFoodToDay(food, grams, meal) {
   save();
   return n;
 }
+// ---------- Combos: varias comidas guardadas que se agregan con un toque ----------
+const comboKcal = c => c.items.reduce((a, x) => a + x.kcal, 0);
+function addCombo(c, meal, dateKey = currentDate) {
+  day(dateKey).foods.push(...c.items.map(x => ({ ...x, id: uid(), meal })));
+  save(); tap();
+  toast(`✓ ${c.name} · ${r0(comboKcal(c))} kcal en ${MEALS.find(m => m.id === meal).name.toLowerCase()}`);
+}
+function comboListHtml() {
+  const q = norm(ui.foodQuery.trim());
+  const list = state.combos.filter(c => !q || norm(c.name).includes(q));
+  return list.map(c => `
+    <div class="item food-row" data-combo="${c.id}" role="button" tabindex="0">
+      <span class="fi" aria-hidden="true">🍱</span>
+      <div class="info"><div class="name">${esc(c.name)}</div><div class="muted small">${c.items.length} alimentos · ${r0(comboKcal(c))} kcal</div></div>
+      <button class="quick-add" data-combo-add="${c.id}" aria-label="Agregar combo">＋</button>
+    </div>`).join('') || '<div class="empty">Aún no tienes combos. En Hoy, toca 💾 en una comida con 2 o más alimentos para guardarla como combo (por ejemplo, "Mi desayuno de siempre").</div>';
+}
+function openCombo(id) {
+  const c = state.combos.find(x => x.id === id);
+  if (!c) return;
+  openModal(`<div class="sheet-title"><span class="fi lg">🍱</span><h2>${esc(c.name)}</h2></div>
+    <div class="list" style="margin:10px 0">${c.items.map(x => `<div class="item"><span class="fi sm">${entryIcon(x)}</span><div class="info"><div class="name">${esc(x.name)}</div><div class="muted small">${x.grams ? r0(x.grams) + ' g' : 'registro rápido'}</div></div><span class="kcal">${r0(x.kcal)}</span></div>`).join('')}</div>
+    <div class="result-box"><b>${r0(comboKcal(c))} kcal</b> · P ${r0(c.items.reduce((a, x) => a + x.p, 0))} · C ${r0(c.items.reduce((a, x) => a + x.c, 0))} · G ${r0(c.items.reduce((a, x) => a + x.g, 0))}</div>
+    <div class="meal-pick small-pick">${MEALS.map(x => `<button class="${x.id === (c.meal || ui.meal) ? 'on' : ''}" data-sheet-meal="${x.id}">${MEAL_ICO[x.id]} ${x.name}</button>`).join('')}</div>
+    <div class="btn-row"><button class="btn" id="cbAdd" style="flex:1">Agregar</button><button class="btn ghost" id="cbDel" style="color:var(--danger)">Eliminar combo</button></div>`, m => {
+    let meal = c.meal || ui.meal;
+    m.querySelectorAll('[data-sheet-meal]').forEach(b => b.addEventListener('click', () => { meal = b.dataset.sheetMeal; m.querySelectorAll('[data-sheet-meal]').forEach(x => x.classList.toggle('on', x === b)); }));
+    m.querySelector('#cbAdd').addEventListener('click', () => { closeModal(); addCombo(c, meal); render(); });
+    m.querySelector('#cbDel').addEventListener('click', () => {
+      if (!confirm('¿Eliminar este combo?')) return;
+      state.combos = state.combos.filter(x => x.id !== id); save(); closeModal(); render();
+    });
+  });
+}
 function foodListHtml() {
+  if (ui.foodCat === COMBOS) return comboListHtml();
   const q = norm(ui.foodQuery.trim());
   const base = ui.foodCat === FAV ? state.favFoods.map(foodById).filter(Boolean)
     : ui.foodCat === RECENT ? recentFoodIds().map(foodById)
@@ -41,7 +76,7 @@ function foodListHtml() {
     + (list.length > shown.length ? `<button class="btn ghost" id="moreFoods" style="width:100%;margin-top:10px">Ver más (${list.length - shown.length})</button>` : '');
 }
 function viewComidas() {
-  const cats = ['Todas', FAV, RECENT, ...new Set(allFoods().map(f => f.cat))];
+  const cats = ['Todas', FAV, RECENT, COMBOS, ...new Set(allFoods().map(f => f.cat))];
   const tg = calcTargets();
   const t = totals(peekDay(currentDate));
   const left = tg.kcal + t.burned - t.kcal;
@@ -60,7 +95,7 @@ function viewComidas() {
     </div>
     <div class="btn-row two">
       <button class="btn ghost" id="quickLog">⚡ Solo sé las calorías</button>
-      <button class="btn ghost" id="newFood">＋ Crear alimento</button>
+      <button class="btn ghost" id="newFood">🏷️ Etiqueta / crear</button>
     </div>`;
 }
 // Hoja para elegir cantidad y comida de un alimento
@@ -134,6 +169,12 @@ bind.comidas = () => {
       r.addEventListener('click', () => openFoodSheet(r.dataset.food));
       r.addEventListener('keydown', ev => { if (ev.key === 'Enter') openFoodSheet(r.dataset.food); });
     });
+    $$('[data-combo-add]').forEach(b => b.addEventListener('click', e => {
+      e.stopPropagation();
+      addCombo(state.combos.find(c => c.id === b.dataset.comboAdd), ui.meal);
+      b.classList.add('pop'); setTimeout(() => b.classList.remove('pop'), 400);
+    }));
+    $$('[data-combo]').forEach(r => r.addEventListener('click', () => openCombo(r.dataset.combo)));
     const more = $('#moreFoods');
     if (more) more.addEventListener('click', () => { ui.foodLimit = (ui.foodLimit || 40) + 60; refresh(); });
   };
@@ -152,9 +193,11 @@ bind.comidas = () => {
     $$('[data-pick-meal]').forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-checked', x === b); });
     refresh(); tap();
   }));
-  $('#newFood').addEventListener('click', () => openModal(`
+  const openNewFood = () => openModal(`
     <h2>Crear alimento</h2>
-    <p class="muted small" style="margin-top:-6px">Copia los datos de la etiqueta nutricional (por 100 g).</p>
+    <p class="muted small" style="margin-top:-6px">Datos de la etiqueta nutricional, por 100 g.</p>
+    <label class="btn ghost label-btn" style="width:100%;margin:0 0 12px">🏷️ Leer la etiqueta con la cámara<input type="file" id="cfPhoto" accept="image/*" capture="environment" hidden></label>
+    <div class="muted small" id="cfStatus"></div>
     <div class="field"><label for="cfName">Nombre</label><input id="cfName" placeholder="Ej: Barra de cereal X"></div>
     <div class="grid g4 keep" style="gap:8px">
       <div class="field"><label for="cfKcal">kcal</label><input id="cfKcal" type="number" min="0" inputmode="decimal"></div>
@@ -164,6 +207,22 @@ bind.comidas = () => {
     </div>
     <div class="field"><label for="cfPor">Porción típica (g, opcional)</label><input id="cfPor" type="number" min="1" inputmode="decimal"></div>
     <button class="btn" id="cfSave" style="width:100%">Guardar alimento</button>`, m => {
+    const st = x => { m.querySelector('#cfStatus').textContent = x; };
+    m.querySelector('#cfPhoto').addEventListener('change', async e => {
+      const file = e.target.files[0];
+      e.target.value = '';
+      if (!file) return;
+      st('Preparando el lector… (la primera vez descarga ≈6 MB)');
+      try {
+        const text = await readLabel(file, st);
+        const r = parseLabel(text);
+        const set = (id, v) => { if (v !== null && v !== undefined) m.querySelector(id).value = v; };
+        set('#cfKcal', r.kcal); set('#cfP', r.p); set('#cfC', r.c); set('#cfG', r.g); set('#cfPor', r.por);
+        const found = ['kcal', 'p', 'c', 'g'].filter(k => r[k] !== null).length;
+        st(found ? `✓ Leí ${found} de 4 valores. Revísalos antes de guardar.` : 'No pude leer la tabla. Intenta con la etiqueta recta, bien iluminada y de cerca.');
+        if (found) m.querySelector('#cfName').focus();
+      } catch (err) { st('No pude abrir el lector. Revisa tu conexión e inténtalo de nuevo.'); }
+    });
     m.querySelector('#cfSave').addEventListener('click', () => {
       const v = x => m.querySelector(x).value;
       const name = v('#cfName').trim(), kcal = Number(v('#cfKcal'));
@@ -173,7 +232,8 @@ bind.comidas = () => {
       state.customFoods.push(f); save(); closeModal(); render(); toast('Alimento guardado');
       openFoodSheet(f.id);
     });
-  }));
+  });
+  $('#newFood').addEventListener('click', openNewFood);
   $('#quickLog').addEventListener('click', () => openModal(`
     <h2>Registro rápido</h2>
     <p class="muted small" style="margin-top:-6px">¿Comiste algo y solo sabes las calorías?</p>
