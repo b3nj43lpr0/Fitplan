@@ -44,7 +44,7 @@ Los datos se guardan en tu cuenta de Firebase y se actualizan en todos tus dispo
 - **Ejercicio**: 44 actividades; calcula calorías quemadas según tu peso y minutos.
 - **Recetas**: 60 recetas con calorías calculadas, recetas propias con calculadora de ingredientes y botón de video en YouTube; sugerencias según lo que te queda del día; plan semanal automático (puedes cambiar cada comida) y lista de compras con casillas para copiar o compartir por WhatsApp.
 - **Rutinas**: rutina semanal según objetivo, nivel, días, minutos y lugar (casa sin equipo, casa con mancuernas o bandas, gimnasio). Biblioteca de 650 ejercicios con imágenes, músculos, técnica, consejos y video. Puedes cambiar cualquier ejercicio por otro parecido. Modo entrenamiento con registro de series, peso y temporizador de descanso.
-- **Progreso**: registro de peso con gráfico y promedio de 7 días, ritmo semanal, ajuste automático de la meta de calorías, medidas corporales, % de grasa estimado e historial de fuerza (1RM estimado y récords).
+- **Progreso**: registro de peso con gráfico y promedio de 7 días, ritmo semanal, ajuste automático de la meta de calorías, medidas corporales, % de grasa estimado e historial de fuerza (1RM estimado y récords). Resumen de 7 y 30 días con gráfico de macros, rachas, 15 logros y fotos de progreso con comparación de antes y después (las fotos quedan solo en el dispositivo).
 
 ## Archivos
 
