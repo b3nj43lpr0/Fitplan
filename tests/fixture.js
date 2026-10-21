@@ -1,4 +1,6 @@
 // Datos realistas de 3 semanas
+// Lunes de la semana pasada: así el resumen semanal no aparece en medio de las pruebas
+function lastMonday() { const d = new Date(); d.setDate(d.getDate() - ((d.getDay() + 6) % 7) - 7); const z = n => String(n).padStart(2, '0'); return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}`; }
 module.exports = function fixture() {
   const z=n=>String(n).padStart(2,'0'); const key=d=>`${d.getFullYear()}-${z(d.getMonth()+1)}-${z(d.getDate())}`;
   const days={}, weights=[], workouts=[];
@@ -9,5 +11,5 @@ module.exports = function fixture() {
     if(i%3===0) weights.push({d:k,kg:+(82-(21-i)*0.08).toFixed(1)});
     if(i%2===1) workouts.push({id:'w'+i,d:k,name:'Cuerpo completo A',minutes:52,ex:[{id:'bench-press',sets:[{kg:40+(21-i),reps:10},{kg:40+(21-i),reps:9}]}]});
   }
-  return {profile:{nombre:'Benja',sexo:'h',edad:30,altura:175,peso:80,actividad:1.55,objetivo:'perder',dieta:'equilibrada'},days,weights:weights.reverse(),workouts:workouts.reverse(),favFoods:['pollo','avena'],badges:['inicio','racha3','racha7','entreno1'],_ts:1};
+  return {profile:{nombre:'Benja',sexo:'h',edad:30,altura:175,peso:80,actividad:1.55,objetivo:'perder',dieta:'equilibrada'},days,weights:weights.reverse(),workouts:workouts.reverse(),favFoods:['pollo','avena'],badges:['inicio','racha3','racha7','entreno1'],weeklySeen:lastMonday(),_ts:1};
 };

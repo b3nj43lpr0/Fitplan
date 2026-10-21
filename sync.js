@@ -82,6 +82,7 @@
     out.measures = uniq(older.measures, newer.measures, i => JSON.stringify(i));
     out.customRecipes = uniq(older.customRecipes, newer.customRecipes, i => i.id);
     out.customExercises = uniq(older.customExercises, newer.customExercises, i => i.id);
+    out.challenges = uniq(older.challenges, newer.challenges, i => i.id + i.start);
     out.badges = [...new Set([...(older.badges || []), ...(newer.badges || [])])];
     out.favFoods = [...new Set([...(older.favFoods || []), ...(newer.favFoods || [])])];
     out.workouts = uniq(older.workouts, newer.workouts, i => i.id).sort((m, n) => (m.d < n.d ? -1 : 1));

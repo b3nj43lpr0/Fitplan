@@ -21,13 +21,20 @@ const GOALS = {
   mantener: { label: 'Mantener peso', adj: 0, protPerKg: 1.6, rate: 0 },
   ganar: { label: 'Ganar músculo', adj: 300, protPerKg: 2.0, rate: 0.25 },
 };
+// Ritmo del déficit al perder grasa (kcal/día bajo el gasto). 7.700 kcal ≈ 1 kg de grasa
+const RITMOS = {
+  suave: { label: 'Suave', adj: -300 },
+  moderado: { label: 'Moderado', adj: -500 },
+  rapido: { label: 'Rápido', adj: -750 },
+};
+const KCAL_KG = 7700;
 const DIETS = {
   equilibrada: { label: 'Equilibrada', fatPct: 0.25 },
   proteica: { label: 'Alta en proteína', fatPct: 0.25, protBonus: 0.3 },
   lowcarb: { label: 'Baja en carbohidratos', fatPct: 0.45 },
   vegetariana: { label: 'Vegetariana', fatPct: 0.25 },
 };
-const EMPTY = () => ({ profile: null, days: {}, customFoods: [], routine: null, weights: [], measures: [], plan: null, ajuste: 0, lastAdjust: null, favFoods: [], workouts: [], customRecipes: [], badges: [], customExercises: [] });
+const EMPTY = () => ({ profile: null, days: {}, customFoods: [], routine: null, weights: [], measures: [], plan: null, ajuste: 0, lastAdjust: null, favFoods: [], workouts: [], customRecipes: [], badges: [], customExercises: [], challenges: [], dietBreak: null, weeklySeen: null });
 
 // ---------- Tema (se guarda por dispositivo) ----------
 const THEME_KEY = 'fitplan-theme';
@@ -279,6 +286,8 @@ const BADGES = [
   } },
   { id: 'chef', ico: '👩‍🍳', name: 'Chef', desc: 'Crea tu primera receta', test: () => state.customRecipes.length >= 1 },
   { id: 'plan', ico: '🗓️', name: 'Organizado', desc: 'Genera un plan semanal de comidas', test: () => !!state.plan },
+  { id: 'desafio', ico: '🥇', name: 'Desafío cumplido', desc: 'Completa un desafío de 30 días', test: () => state.challenges.some(c => c.won) },
+  { id: 'meta', ico: '🏁', name: '¡Meta alcanzada!', desc: 'Llega a tu peso meta', test: () => { const p = state.profile; return !!(p && p.meta && state.weights.length > 1 && (p.objetivo === 'ganar' ? currentWeight() >= p.meta : currentWeight() <= p.meta)); } },
 ];
 function checkBadges() {
   if (!state.profile) return;
@@ -301,13 +310,16 @@ function calcTargets(p = state.profile) {
   const goal = GOALS[p.objetivo];
   const diet = DIETS[p.dieta || 'equilibrada'];
   const ajuste = p.autoAjuste ? state.ajuste : 0;
-  const kcal = Math.max(p.sexo === 'h' ? 1500 : 1200, tdee + goal.adj + ajuste);
+  const breakOn = dietBreakActive();
+  const adj = breakOn ? 0 : goalAdj(p);
+  const floor = p.sexo === 'h' ? 1500 : 1200;
+  const kcal = Math.max(floor, tdee + adj + (breakOn ? 0 : ajuste));
   const prot = (goal.protPerKg + (diet.protBonus || 0)) * peso;
   const fat = (kcal * diet.fatPct) / 9;
   const carb = Math.max(0, (kcal - prot * 4 - fat * 9) / 4);
   const imc = peso / Math.pow(p.altura / 100, 2);
   const water = Math.round((peso * 35) / 250); // vasos de 250 ml
-  return { bmr, tdee, kcal, prot, fat, carb, imc, water, peso, ajuste };
+  return { bmr, tdee, kcal, prot, fat, carb, imc, water, peso, ajuste, adj, floor, breakOn, plannedDeficit: tdee - kcal };
 }
 // Metas de macros del día: las calorías quemadas se "devuelven" sobre todo como carbohidratos (70 %) y algo de grasa
 function dayGoals(tg, burned) {
@@ -361,13 +373,101 @@ function autoAdjust(force = false) {
   if (!force && state.lastAdjust && daysBetween(state.lastAdjust, todayKey()) < 7) return null;
   const rate = weightTrend();
   if (rate === null) return null;
-  const expected = GOALS[p.objetivo].rate;
+  const expected = expectedRate(p);
   const diff = rate - expected; // kg/semana por sobre lo esperado
   if (Math.abs(diff) < 0.1) { state.lastAdjust = todayKey(); return 0; }
   const step = Math.max(-200, Math.min(200, -diff * 7700 / 7));
   state.ajuste = Math.max(-600, Math.min(600, Math.round((state.ajuste + step) / 10) * 10));
   state.lastAdjust = todayKey();
   return step;
+}
+// ---------- Déficit calórico ----------
+function goalAdj(p) { return p.objetivo === 'perder' ? RITMOS[p.ritmo || 'moderado'].adj : GOALS[p.objetivo].adj; }
+// kg por semana esperados según el ritmo elegido
+function expectedRate(p) { return p.objetivo === 'perder' ? Math.round(goalAdj(p) * 7 / KCAL_KG * 100) / 100 : GOALS[p.objetivo].rate; }
+const dietBreakActive = () => !!(state.dietBreak && state.dietBreak.until >= todayKey());
+// Déficit de un día registrado: gasto (metabolismo × actividad + ejercicio) menos lo comido. Negativo = superávit
+function dayDeficit(k, tg = calcTargets()) {
+  const d = state.days[k];
+  if (!d || !d.foods.length) return null;
+  const t = totals(d);
+  return tg.tdee + t.burned - t.kcal;
+}
+// Estadísticas de los últimos n días completos (sin contar hoy, que aún no termina)
+function deficitStats(n, tg = calcTargets()) {
+  const days = Array.from({ length: n }, (_, i) => shiftKey(todayKey(), -(i + 1))).reverse();
+  const vals = days.map(k => ({ k, v: dayDeficit(k, tg) }));
+  const logged = vals.filter(x => x.v !== null);
+  const sum = logged.reduce((a, x) => a + x.v, 0);
+  return { days: vals, logged: logged.length, sum, avg: logged.length ? sum / logged.length : null, kg: sum / KCAL_KG };
+}
+// Cuándo llegarías al peso meta con tu déficit real de las últimas 2 semanas (o el planeado si aún no hay datos)
+function goalProjection(tg = calcTargets()) {
+  const p = state.profile;
+  if (!p || !p.meta) return null;
+  const now = currentWeight(), diff = now - p.meta;
+  if (Math.abs(diff) < 0.2) return { reached: true };
+  const st = deficitStats(14, tg);
+  const daily = st.logged >= 5 ? st.avg : tg.plannedDeficit;
+  const perWeek = daily * 7 / KCAL_KG;
+  if (diff > 0 ? perWeek <= 0.02 : perWeek >= -0.02) return { stalled: true, diff, real: st.logged >= 5 };
+  const weeks = diff / perWeek;
+  const date = shiftKey(todayKey(), Math.round(weeks * 7));
+  return { weeks, date, perWeek, diff, real: st.logged >= 5 };
+}
+// Semanas seguidas (hacia atrás desde la pasada) con déficit promedio de más de 200 kcal
+function deficitWeeks(tg = calcTargets()) {
+  let n = 0;
+  for (let w = 0; w < 52; w++) {
+    const vals = Array.from({ length: 7 }, (_, i) => dayDeficit(shiftKey(todayKey(), -(w * 7 + i + 1)), tg)).filter(v => v !== null);
+    if (vals.length < 3 || vals.reduce((a, b) => a + b, 0) / vals.length < 200) break;
+    n++;
+  }
+  return n;
+}
+// Avisos para que el déficit sea sano
+function deficitWarnings(tg = calcTargets()) {
+  const p = state.profile, out = [];
+  const st = deficitStats(7, tg);
+  if (st.logged >= 3 && st.avg > Math.max(1000, tg.tdee * 0.3)) out.push({ lvl: 'alto', ico: '⚠️', txt: `Tu déficit promedio es de ${Math.round(st.avg).toLocaleString('es')} kcal al día. Más de 1.000 kcal suele costar músculo y energía: come un poco más.` });
+  const below = st.days.filter(x => x.v !== null && totals(state.days[x.k]).kcal < tg.bmr * 0.9).length;
+  if (below >= 3) out.push({ lvl: 'alto', ico: '🫀', txt: `${below} de los últimos 7 días comiste bajo tu metabolismo basal (${Math.round(tg.bmr).toLocaleString('es')} kcal). Intenta no bajar de ahí.` });
+  const tr = weightTrend();
+  if (tr !== null && tr < -0.01 * currentWeight()) out.push({ lvl: 'medio', ico: '📉', txt: `Estás bajando ${r1(-tr)} kg por semana, más del 1 % de tu peso: a ese ritmo es fácil perder músculo.` });
+  if (p.objetivo === 'perder' && st.logged >= 3) {
+    const prot = st.days.filter(x => x.v !== null).reduce((a, x) => a + totals(state.days[x.k]).p, 0) / st.logged;
+    if (prot < tg.prot * 0.8) out.push({ lvl: 'medio', ico: '🥩', txt: `En déficit la proteína cuida tu músculo: vas en ${r0(prot)} g de ${r0(tg.prot)} g al día.` });
+  }
+  const weeks = deficitWeeks(tg);
+  if (weeks >= 8 && !dietBreakActive()) out.push({ lvl: 'info', ico: '🌴', txt: `Llevas ${weeks} semanas en déficit. Una semana en mantención ayuda a recuperar energía y adherencia.`, action: 'break' });
+  return out;
+}
+
+// ---------- Desafíos de 30 días ----------
+const CHALLENGE_DAYS = 30;
+const CHALLENGES = [
+  { id: 'proteina', ico: '🥩', name: 'Proteína todos los días', desc: 'Llega al 90 % de tu meta de proteína', need: 25, test: (d, tg) => d.foods.length && totals(d).p >= tg.prot * 0.9 },
+  { id: 'agua', ico: '💧', name: 'Hidratación', desc: 'Cumple tu meta de agua', need: 25, test: (d, tg) => d.water >= tg.water },
+  { id: 'registro', ico: '📝', name: 'Registra todo', desc: 'Anota tus comidas todos los días', need: 27, test: d => d.foods.length > 0 },
+  { id: 'deficit', ico: '🔥', name: 'Déficit constante', desc: 'Termina en déficit sin bajar de tu metabolismo basal', need: 22, test: (d, tg) => { if (!d.foods.length) return false; const t = totals(d); return tg.tdee + t.burned - t.kcal > 0 && t.kcal >= tg.bmr * 0.9; } },
+  { id: 'entreno', ico: '🏋️', name: '3 entrenamientos por semana', desc: 'Registra ejercicio 12 días en un mes', need: 12, test: d => d.exercises.length > 0 },
+  { id: 'pasos', ico: '🚶', name: '10.000 pasos', desc: 'Márcalo cada día que llegues', need: 22, manual: true },
+  { id: 'azucar', ico: '🥤', name: 'Sin bebidas azucaradas', desc: 'Márcalo cada día sin bebidas ni jugos con azúcar', need: 25, manual: true },
+  { id: 'sueno', ico: '😴', name: 'Dormir 7 horas', desc: 'Márcalo cada noche que duermas 7 horas o más', need: 22, manual: true },
+];
+// Estado de un desafío: días cumplidos, días transcurridos y si ya terminó
+function challengeProgress(c) {
+  const def = CHALLENGES.find(x => x.id === c.id);
+  const tg = calcTargets();
+  const elapsed = Math.min(CHALLENGE_DAYS, daysBetween(c.start, todayKey()) + 1);
+  const days = Array.from({ length: CHALLENGE_DAYS }, (_, i) => {
+    const k = shiftKey(c.start, i);
+    if (k > todayKey()) return { k, st: 'futuro' };
+    const ok = def.manual ? !!(c.checks || {})[k] : !!def.test(peekDay(k), tg);
+    return { k, st: ok ? 'ok' : k === todayKey() ? 'hoy' : 'no' };
+  });
+  const done = days.filter(x => x.st === 'ok').length;
+  return { def, days, done, elapsed, finished: elapsed >= CHALLENGE_DAYS && todayKey() > shiftKey(c.start, CHALLENGE_DAYS - 1), won: done >= def.need };
 }
 function bodyFat(m, p) {
   if (!m || !m.cintura || !m.cuello) return null;

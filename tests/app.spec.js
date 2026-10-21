@@ -290,3 +290,60 @@ test('Más entrenamientos: tipos de rutina y entrenamiento suelto', async ({ pag
   expect(JSON.stringify((await state(page)).routine)).toBe(before);
   expect((await today(page)).exercises.some(e => e.name === 'Entrenamiento: Core 15 min')).toBe(true);
 });
+
+test('Déficit: balance, ritmo, meta, avisos y semana de mantención', async ({ page }) => {
+  // Ritmo: cambia la meta de calorías
+  const kc = await page.evaluate(() => ['suave', 'moderado', 'rapido'].map(r => { state.profile.ritmo = r; return Math.round(calcTargets().kcal); }));
+  expect(kc[0] - kc[1]).toBe(200);
+  expect(kc[1] - kc[2]).toBe(250);
+  await page.evaluate(() => { state.profile.ritmo = 'moderado'; });
+  // Hoy muestra el balance de ayer y de la semana
+  await page.reload();
+  await expect(page.locator('.deficit-card')).toContainText('Últimos 7 días');
+  // El déficit de un día es gasto + ejercicio − comida
+  const d = await page.evaluate(() => { const k = shiftKey(todayKey(), -1), t = totals(state.days[k]), tg = calcTargets(); return [dayDeficit(k, tg), tg.tdee + t.burned - t.kcal]; });
+  expect(d[0]).toBeCloseTo(d[1], 5);
+  await page.click('[data-prog-tab=deficit]');
+  await expect(page.locator('.def-chart .dc')).toHaveCount(14);
+  // Meta y proyección
+  await page.fill('#dMeta', '75');
+  await page.selectOption('#dRitmo', 'suave');
+  await page.click('#dSave');
+  const p = (await state(page)).profile;
+  expect(p).toMatchObject({ meta: 75, ritmo: 'suave' });
+  await expect(page.locator('.result-box').first()).toContainText(/semanas|no te acercas/);
+  // Aviso de déficit muy agresivo: 7 días comiendo 600 kcal
+  await page.evaluate(() => { for (let i = 1; i <= 7; i++) state.days[shiftKey(todayKey(), -i)] = { foods: [{ id: 'x' + i, name: 'x', meal: 'almuerzo', kcal: 600, p: 40, c: 60, g: 20 }], exercises: [], water: 8 }; save(); render(); });
+  await expect(page.locator('.warn-box').first()).toContainText(/Más de 1.000 kcal|metabolismo basal/);
+  // Semana de mantención: la meta pasa a ser el gasto
+  await page.evaluate(() => { state.dietBreak = { from: todayKey(), until: shiftKey(todayKey(), 6) }; });
+  expect(await page.evaluate(() => Math.round(calcTargets().kcal) === Math.round(calcTargets().tdee))).toBe(true);
+});
+
+test('Desafíos de 30 días y resumen semanal', async ({ page }) => {
+  await page.click('[data-view=progreso]');
+  await page.click('[data-tab-prog=logros]');
+  await page.click('[data-start-ch=pasos]');
+  await page.click('[data-start-ch=agua]');
+  await page.click('[data-check-ch=pasos]');
+  const c = (await state(page)).challenges.find(x => x.id === 'pasos');
+  expect(Object.keys(c.checks)).toHaveLength(1);
+  await page.click('[data-view=hoy]');
+  await expect(page.locator('.card', { hasText: 'Desafíos' })).toContainText('10.000 pasos');
+  // Un desafío que empezó hace 31 días y se cumplió se cierra como ganado
+  await page.evaluate(() => {
+    const start = shiftKey(todayKey(), -31), checks = {};
+    for (let i = 0; i < 30; i++) checks[shiftKey(start, i)] = true;
+    state.challenges.push({ id: 'sueno', start, checks }); save(); render();
+  });
+  const s = (await state(page)).challenges.find(x => x.id === 'sueno');
+  expect(s).toMatchObject({ closed: true, won: true });
+  // Resumen semanal: aparece solo una vez por semana
+  await page.evaluate(() => { state.weeklySeen = null; save(); });
+  await page.reload();
+  await expect(page.locator('.weekly')).toBeVisible();
+  await page.click('#wkOk');
+  await page.reload();
+  await page.waitForTimeout(1000);
+  await expect(page.locator('.weekly')).toHaveCount(0);
+});

@@ -673,3 +673,35 @@ body:has(.modal-back) .toast { bottom: auto; top: calc(16px + env(safe-area-inse
 .quick span { font-size: 20px; }
 .quick:hover { border-color: var(--accent); }
 .quick:active { transform: scale(.96); }
+
+/* ---------- Déficit, desafíos y resumen semanal ---------- */
+.def-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.def-grid > div { background: var(--soft); border-radius: 14px; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; }
+.def-grid b { font-size: 19px; }
+.good { color: var(--carb); }
+.bad { color: var(--prot); }
+.pill-soft { display: inline-block; background: var(--accent-soft); color: var(--accent); border-radius: 99px; padding: 4px 10px; font-size: 13px; font-weight: 600; margin-bottom: 10px; }
+.warn-box { margin-top: 10px; border-radius: 12px; padding: 10px 12px; font-size: 14px; background: color-mix(in srgb, var(--burn) 12%, var(--card)); border-left: 4px solid var(--burn); }
+.warn-box.info { background: var(--accent-soft); border-left-color: var(--accent); }
+.warn-box.medio { border-left-color: #f5b301; }
+.ok-badge { color: var(--carb); font-weight: 700; font-size: 13px; white-space: nowrap; }
+.def-chart { display: flex; gap: 4px; height: 160px; align-items: stretch; margin-top: 8px; }
+.dc { flex: 1; display: flex; flex-direction: column; align-items: center; min-width: 0; }
+.dc-up, .dc-down { flex: 1; width: 100%; max-width: 22px; display: flex; }
+.dc-up { align-items: flex-end; border-bottom: 1px solid var(--line); }
+.dc-down { align-items: flex-start; }
+.dc i { display: block; width: 100%; border-radius: 6px; min-height: 3px; }
+.dc i.pos { background: var(--carb); border-radius: 6px 6px 0 0; }
+.dc i.neg { background: var(--prot); border-radius: 0 0 6px 6px; }
+.dc span { font-size: 10px; color: var(--muted); margin-top: 3px; }
+.ch { padding: 12px 0; border-bottom: 1px solid var(--line); }
+.ch:last-of-type { border-bottom: 0; }
+.ch-dots { display: grid; grid-template-columns: repeat(15, 1fr); gap: 4px; margin: 10px 0; }
+.ch-dots i { aspect-ratio: 1; border-radius: 50%; background: var(--soft); }
+.ch-dots i.ok { background: var(--accent); }
+.ch-dots i.no { background: color-mix(in srgb, var(--prot) 35%, var(--soft)); }
+.ch-dots i.hoy { box-shadow: inset 0 0 0 2px var(--accent); }
+.weekly { text-align: center; }
+.weekly .minis { text-align: center; }
+.weekly .hint-box { text-align: left; }
+@media (max-width: 440px) { .tabs .te { display: none; } }
