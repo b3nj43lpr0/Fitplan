@@ -100,7 +100,7 @@ function coachLog() { try { return JSON.parse(localStorage.getItem(COACH_KEY)) |
 function storeCoach(l) { try { localStorage.setItem(COACH_KEY, JSON.stringify(l.slice(-30))); } catch (e) { /* ignorar */ } }
 // Texto de la IA → HTML seguro (negritas, viñetas y saltos de línea)
 function mdLite(t) {
-  return esc(t).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/^\s*[-*•]\s+/gm, '• ').replace(/\n/g, '<br>');
+  return esc(t).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/(^|\s)_(.+?)_(?=\s|$)/g, '$1<span class="muted small">$2</span>').replace(/^\s*[-*•]\s+/gm, '• ').replace(/\n/g, '<br>');
 }
 function coachErrorText(e) {
   const m = String((e && (e.code || e.message)) || '');
@@ -153,7 +153,10 @@ function openCoach() {
         });
       } catch (e) {
         const fallback = basicCoach(topic && ['bien', 'mejorar', 'meta'].includes(topic) ? topic : 'semana');
-        answer = coachErrorText(e) + '\n' + fallback.map(x => '- ' + x).join('\n');
+        // El detalle técnico ayuda a saber qué falta configurar (se puede copiar y enviar)
+        const detail = e && e.code !== 'auth' && e.code !== 'offline' ? `\n\n_Detalle técnico: ${String(e.message || e).slice(0, 220)}_` : '';
+        console.warn('Coach IA:', e);
+        answer = coachErrorText(e) + '\n' + fallback.map(x => '- ' + x).join('\n') + detail;
       }
       log.push({ role: 'model', text: answer });
       storeCoach(log);

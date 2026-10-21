@@ -503,6 +503,11 @@ test('Coach: chat con IA (simulada), contexto sin datos personales y coach bási
   await expect(page.locator('.msg.model').last()).toContainText('inicia sesión con Google');
   // El chat queda guardado en el teléfono
   expect(await page.evaluate(() => coachLog().length)).toBe(6);
+  // Si Firebase rechaza la petición, se muestra el motivo y el detalle técnico para revisarlo
+  await page.evaluate(() => { window.FitSync.ask = async () => { throw new Error('[403] PERMISSION_DENIED: Firebase AI Logic API has not been used in project'); }; });
+  await page.click('[data-q=meta]');
+  await expect(page.locator('.msg.model').last()).toContainText('Falta activar la IA en Firebase');
+  await expect(page.locator('.msg.model').last()).toContainText('Detalle técnico: [403] PERMISSION_DENIED');
   const basic = await page.evaluate(() => basicCoach('semana'));
   expect(basic.some(x => x.startsWith('✅')) || basic.some(x => x.startsWith('💡'))).toBe(true);
 });

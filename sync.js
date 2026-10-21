@@ -291,7 +291,8 @@
         return full;
       } catch (e) {
         lastErr = e;
-        if (!/not found|404|not supported|unsupported model/i.test(String(e && e.message))) break;
+        // Permisos o cuota no se arreglan cambiando de modelo; cualquier otro error, se prueba el siguiente
+        if (/permission|403|api.?key|quota|429|resource.?exhausted|billing|unauthenticated|401/i.test(String(e && e.message))) break;
       }
     }
     throw lastErr;
