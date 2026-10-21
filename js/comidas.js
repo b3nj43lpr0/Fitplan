@@ -34,6 +34,7 @@ function foodListHtml() {
   const mealName = MEALS.find(m => m.id === ui.meal).name.toLowerCase();
   return (shown.length ? shown.map(f => `
     <div class="item food-row" data-food="${f.id}" role="button" tabindex="0">
+      <span class="fi" aria-hidden="true">${foodIcon(f)}</span>
       <div class="info"><div class="name">${isFav(f.id) ? '<span class="star-on">★</span> ' : ''}${esc(f.name)}</div><div class="muted small">${f.por ? `porción ${f.por} g · ${r0(f.kcal * f.por / 100)} kcal` : `${r0(f.kcal)} kcal por 100 g`}</div></div>
       <button class="quick-add" data-quick="${f.id}" aria-label="Agregar ${f.por || 100} g a ${mealName}" title="Agregar ${f.por || 100} g a ${mealName}">＋</button>
     </div>`).join('') : `<div class="empty">${ui.foodCat === FAV ? 'Aún no tienes favoritas. Abre un alimento y toca ☆ para guardarlo aquí.' : ui.foodCat === RECENT ? 'Aquí aparecerá lo que registres.' : 'No encontré ese alimento. Escanéalo o créalo con los botones de arriba.'}</div>`)
@@ -67,7 +68,7 @@ function openFoodSheet(id) {
   const sel = foodById(id);
   if (!sel) return;
   openModal(`
-    <div class="sheet-title"><h2>${esc(sel.name)}</h2><button class="icon-btn star ${isFav(sel.id) ? 'on' : ''}" id="favBtn" aria-pressed="${isFav(sel.id)}" aria-label="Favorita">${isFav(sel.id) ? '★' : '☆'}</button></div>
+    <div class="sheet-title"><span class="fi lg" aria-hidden="true">${foodIcon(sel)}</span><h2>${esc(sel.name)}</h2><button class="icon-btn star ${isFav(sel.id) ? 'on' : ''}" id="favBtn" aria-pressed="${isFav(sel.id)}" aria-label="Favorita">${isFav(sel.id) ? '★' : '☆'}</button></div>
     <p class="muted small" style="margin:4px 0 12px">${sel.brand ? esc(sel.brand) + ' · ' : ''}${r0(sel.kcal)} kcal por 100 g · ${esc(sel.cat)}</p>
     <div class="chips">
       ${sel.por ? `<button class="chip active" data-grams="${sel.por}">1 porción (${sel.por} g)</button><button class="chip" data-grams="${sel.por / 2}">½</button><button class="chip" data-grams="${sel.por * 2}">2 porciones</button>` : ''}

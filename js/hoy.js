@@ -65,6 +65,7 @@ function viewHoy() {
       <div class="meal-acts">${canRepeat ? `<button class="see" data-repeat="${m.id}">↺ Ayer</button>` : ''}<button class="add-meal" data-add-meal="${m.id}" aria-label="Agregar a ${m.name}">＋</button></div></div>
       <div class="list">${items.length ? items.map(f => `
         <div class="item tappable" data-edit-food="${f.id}" tabindex="0" role="button">
+          <span class="fi sm" aria-hidden="true">${entryIcon(f)}</span>
           <div class="info"><div class="name">${esc(f.name)}</div><div class="muted small">${f.grams ? r0(f.grams) + ' g · ' : ''}P ${r0(f.p)} · C ${r0(f.c)} · G ${r0(f.g)}</div></div>
           <span class="kcal">${r0(f.kcal)}</span>
           <button class="icon-btn" data-del-food="${f.id}" aria-label="Eliminar">✕</button>
@@ -94,7 +95,7 @@ function viewHoy() {
   const planHtml = planDay ? MEALS.map(m => {
     const pm = planDay.meals[m.id];
     const r = pm && allRecipes().find(x => x.id === pm.id);
-    return r ? `<div class="item"><div class="info"><div class="muted small">${m.name}</div><div class="name">${esc(r.name)}</div></div>
+    return r ? `<div class="item"><span class="fi sm" aria-hidden="true">${recipeIcon(r)}</span><div class="info"><div class="muted small">${m.name}</div><div class="name">${esc(r.name)}</div></div>
       <span class="kcal">${r0(recipeNutrition(r, pm.f).kcal)}</span>
       <button class="btn ghost sm" data-log-recipe="${r.id}" data-factor="${pm.f}" data-meal="${m.id}">+ Agregar</button></div>` : '';
   }).join('') : '';
@@ -211,7 +212,7 @@ function editFoodEntry(id) {
   if (!f) return;
   const food = f.foodId && foodById(f.foodId);
   openModal(`
-    <h2 style="padding-right:30px">${esc(f.name)}</h2>
+    <div class="sheet-title"><span class="fi lg" aria-hidden="true">${entryIcon(f)}</span><h2>${esc(f.name)}</h2></div>
     <div class="grid g2" style="gap:10px">
       ${food ? `<div class="field"><label for="eGrams">Cantidad (g)</label><input id="eGrams" type="number" min="1" inputmode="decimal" value="${r0(f.grams)}"></div>`
     : `<div class="field"><label for="eKcal">kcal</label><input id="eKcal" type="number" min="0" inputmode="decimal" value="${r0(f.kcal)}"></div>`}

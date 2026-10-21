@@ -40,7 +40,7 @@ const TIPO_ICO = { desayuno: '🍳', almuerzo: '🍲', cena: '🥗', snack: '�
 function recipeCard(rec, factor = 1, note = '') {
   const n = recipeNutrition(rec, factor);
   return `<div class="rcard" data-open-recipe="${rec.id}" data-factor="${factor}" role="button" tabindex="0">
-    <div class="rc-ico">${TIPO_ICO[rec.tipo] || '🍽️'}</div>
+    <div class="rc-ico">${recipeIcon(rec)}</div>
     <div class="rc-body">
       <b>${esc(rec.name)}</b>
       <span class="muted small">${r0(n.kcal)} kcal · P ${r0(n.p)} · C ${r0(n.c)} · G ${r0(n.g)}${factor !== 1 ? ` · porción ×${factor}` : ''}</span>
@@ -61,7 +61,7 @@ function openRecipe(id, factor = 1) {
   if (!rec) return;
   const n = recipeNutrition(rec, factor);
   openModal(`
-    <div class="rc-hero">${TIPO_ICO[rec.tipo] || '🍽️'}</div>
+    <div class="rc-hero">${recipeIcon(rec)}</div>
     <h2 style="padding-right:30px;margin-bottom:6px">${esc(rec.name)}</h2>
     <div class="tags"><span class="tag type">${rec.tipo}</span>${rec.tags.map(t => `<span class="tag">${TAG_LABEL[t] || t}</span>`).join('')}${factor !== 1 ? `<span class="tag neutral">porción ×${factor}</span>` : ''}</div>
     <div class="minis">
@@ -246,7 +246,7 @@ function viewPlan() {
         const r = pm && allRecipes().find(x => x.id === pm.id);
         if (!r) return '';
         const n = recipeNutrition(r, pm.f); tot += n.kcal;
-        return `<div class="item"><div class="info"><div class="muted small">${m.name}${pm.f !== 1 ? ` · ×${pm.f}` : ''}</div><div class="name">${esc(r.name)}</div></div>
+        return `<div class="item"><span class="fi sm" aria-hidden="true">${recipeIcon(r)}</span><div class="info"><div class="muted small">${m.name}${pm.f !== 1 ? ` · ×${pm.f}` : ''}</div><div class="name">${esc(r.name)}</div></div>
           <span class="kcal">${r0(n.kcal)}</span>
           <button class="icon-btn swap" data-swap="${di}:${m.id}" aria-label="Cambiar" title="Cambiar">🔄</button>
           ${d.date === todayKey() ? `<button class="icon-btn swap" data-log-recipe="${r.id}" data-factor="${pm.f}" data-meal="${m.id}" title="Agregar a hoy" aria-label="Agregar a hoy">＋</button>` : ''}</div>`;
