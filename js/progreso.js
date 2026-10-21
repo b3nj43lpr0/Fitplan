@@ -276,7 +276,7 @@ function viewProgreso() {
   const change = ws.length ? ws[ws.length - 1].kg - ws[0].kg : 0;
   const head = pageHead('Progreso') + tabs('prog', ui.progTab, [['peso', '<span class="te">⚖️ </span>Peso'], ['deficit', '<span class="te">🔥 </span>Déficit'], ['resumen', '<span class="te">📊 </span>Resumen'], ['fuerza', '<span class="te">💪 </span>Fuerza'], ['logros', '<span class="te">🏅 </span>Logros']]);
   if (ui.progTab === 'deficit') return head + deficitTab();
-  if (ui.progTab === 'resumen') return head + summaryCard() + `<button class="btn ghost" id="lastWeek" style="width:100%">📅 Ver el resumen de la semana pasada</button>`;
+  if (ui.progTab === 'resumen') return head + summaryCard() + `<div class="btn-row two"><button class="btn ghost" id="lastWeek">📅 Semana pasada</button><button class="btn" id="askCoach">💬 Pregúntale al coach</button></div>`;
   if (ui.progTab === 'fuerza') return head + strengthCard();
   if (ui.progTab === 'logros') return head + challengesSection() + badgesCard() + photosCard();
   return head + `
@@ -331,6 +331,8 @@ function viewProgreso() {
 }
 bind.progreso = () => {
   $$('[data-tab-prog]').forEach(b => b.addEventListener('click', () => { ui.progTab = b.dataset.tabProg; render(); animateEnter(); }));
+  const ac = $('#askCoach');
+  if (ac) ac.addEventListener('click', openCoach);
   const lw = $('#lastWeek');
   if (lw) lw.addEventListener('click', () => showWeekly(shiftKey(mondayOf(todayKey()), -7)));
   // Déficit

@@ -57,6 +57,12 @@ Los datos se guardan en tu cuenta de Firebase y se actualizan en todos tus dispo
 - **Resumen semanal** automático el primer día que abres la app en la semana, con una sugerencia concreta.
 - **Desafíos de 30 días**: proteína, agua, registro, déficit, entrenamientos, pasos, sin bebidas azucaradas y sueño.
 
+## Coach con IA (gratis)
+
+Toca 💬 en Hoy (o Progreso → Resumen) para preguntarle cosas como "¿qué hice bien esta semana?" o "¿qué ceno con lo que me queda?". Usa Gemini mediante Firebase AI Logic en su nivel gratuito (plan Spark, sin tarjeta) y en cada pregunta le pasa un resumen de tus números (metas, últimos 7 días, peso, entrenamientos y desafíos), sin tu nombre ni tu correo. En el nivel gratuito Google puede usar esas conversaciones para mejorar sus modelos.
+
+Para activarlo: Firebase → Compilación → **AI Logic** → Comenzar → elige **Gemini Developer API** (la opción sin costo) → Activar. Luego inicia sesión con Google en Perfil → Sincronización: el coach con IA solo funciona con sesión iniciada. Sin conexión, sin sesión o si se acaba la cuota gratis, responde un coach básico que analiza tus números sin IA.
+
 ## Varias personas en el mismo teléfono
 
 Toca tu inicial en Hoy (o Perfil → Personas en este teléfono) para agregar a alguien o cambiar de persona. Cada una tiene sus propias comidas, rutina, progreso, entrenamiento en curso y fotos. Con la sincronización, cada perfil se guarda en su propio espacio dentro de la misma cuenta de Google.
