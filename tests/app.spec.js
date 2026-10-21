@@ -398,3 +398,43 @@ test('Combos y ayuno intermitente', async ({ page }) => {
   expect(f.start).toBeNull();
   expect(f.log.at(-1).ok).toBe(true);
 });
+
+test('Entrenamiento: historial, semana de descarga y cronómetro de cardio', async ({ page }) => {
+  // Historial del press de banca (los datos de prueba traen 10 sesiones)
+  expect(await page.evaluate(() => exHistory('bench-press').length)).toBe(5);
+  await page.click('[data-view=rutinas]');
+  await page.waitForSelector('#genRoutine');
+  await page.selectOption('#rEq', 'gym');
+  await page.click('#genRoutine');
+  await page.click('[data-quick-w=fuerza]');
+  await page.click('#qkGo');
+  for (let i = 0; i < 6 && !(await page.locator('#wk h2', { hasText: 'Press de Banca con Barra' }).count()); i++) await page.click('#wNext');
+  await page.click('summary:has-text("Historial")');
+  await expect(page.locator('.hist-row')).toHaveCount(5);
+  await page.click('#wQuit');
+  // Semana de descarga: al completar la semana 4 llega la 5, de descarga
+  await page.evaluate(() => { state.routine.week = 4; state.routine.days.forEach((d, i) => { if (!d.done) setDayDone(i); }); save(); render(); });
+  const r = (await state(page)).routine;
+  expect(r).toMatchObject({ week: 5, deload: true });
+  await expect(page.locator('.warn-box', { hasText: 'Semana de descarga' })).toBeVisible();
+  const lens = await page.evaluate(() => {
+    startWorkout(0);
+    const ses = JSON.parse(localStorage.getItem('fitplan-session'));
+    return state.routine.days[0].exercises.map((x, k) => [x.series, ses.sets[k].length, !!(x.warm || x.stretch)]);
+  });
+  expect(lens.filter(([, , w]) => !w).every(([a, b]) => b < a)).toBe(true);
+  await page.click('#wQuit');
+  // Cronómetro: 30 minutos trotando, 5 km → 6:00 min/km
+  await page.click('[data-tab-rut=actividad]');
+  await page.click('[data-cardio-act=trotar]');
+  await page.click('#cdStart');
+  await expect(page.locator('#cdT')).toBeVisible();
+  await page.evaluate(() => { const c = JSON.parse(localStorage.getItem('fitplan-cardio')); c.start = Date.now() - 30 * 60000; localStorage.setItem('fitplan-cardio', JSON.stringify(c)); render(); });
+  await page.click('#cdStop');
+  await page.fill('#cdKm', '5');
+  await expect(page.locator('#cdPace')).toContainText('6:00 min/km');
+  await page.click('#cdSave');
+  const ex = (await today(page)).exercises.at(-1);
+  expect(ex).toMatchObject({ minutes: 30, km: 5 });
+  expect(ex.name).toContain('6:00 min/km');
+});
