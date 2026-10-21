@@ -70,6 +70,6 @@ bind.ejercicio = () => {
     save(); toast('Ejercicio registrado 💪'); render();
   });
   $$('[data-del-ex]').forEach(b => b.addEventListener('click', () => {
-    const d = day(); d.exercises = d.exercises.filter(e => e.id !== b.dataset.delEx); save(); render();
+    removeWithUndo(day().exercises, e => e.id === b.dataset.delEx, 'Actividad eliminada');
   }));
 };

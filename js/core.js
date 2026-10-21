@@ -136,12 +136,26 @@ function loadExercises() {
 const EX_VIEWS = ['rutinas', 'progreso'];
 function exById(id) { return exDB().find(e => e.id === id); }
 function ytUrl(q) { return 'https://www.youtube.com/results?search_query=' + encodeURIComponent(q); }
-function toast(msg) {
+function toast(msg, undo) {
   const t = $('#toast');
   t.textContent = msg;
+  if (undo) {
+    const b = document.createElement('button');
+    b.className = 'toast-undo'; b.textContent = 'Deshacer';
+    b.addEventListener('click', () => { t.classList.remove('show'); undo(); });
+    t.appendChild(b);
+  }
   t.classList.add('show');
   clearTimeout(toast._t);
-  toast._t = setTimeout(() => t.classList.remove('show'), 2400);
+  toast._t = setTimeout(() => t.classList.remove('show'), undo ? 5000 : 2400);
+}
+// Saca un elemento de una lista y ofrece deshacerlo
+function removeWithUndo(list, pred, label) {
+  const i = list.findIndex(pred);
+  if (i < 0) return;
+  const [item] = list.splice(i, 1);
+  save(); render();
+  toast(label || 'Eliminado', () => { list.splice(Math.min(i, list.length), 0, item); save(); render(); });
 }
 function tabs(name, current, items) {
   return `<div class="tabs" role="tablist">${items.map(([id, label]) =>

@@ -27,6 +27,18 @@
 })();
 
 // ---------- Inicio ----------
+// Accesos directos del ícono de la app (manifest.json → shortcuts): index.html?a=agua|comidas|entrenar|peso
+(function shortcut() {
+  const a = new URLSearchParams(location.search).get('a');
+  if (!a) return;
+  history.replaceState(null, '', location.pathname);
+  if (!state.profile) return;
+  currentDate = todayKey();
+  if (a === 'agua') { day().water++; save(); setTimeout(() => toast(`💧 +1 vaso · llevas ${day().water} de ${calcTargets().water}`), 300); }
+  if (a === 'comidas') { ui.meal = guessMeal(); view = 'comidas'; }
+  if (a === 'entrenar') { ui.rutTab = 'rutina'; view = 'rutinas'; }
+  if (a === 'peso') { ui.progTab = 'peso'; view = 'progreso'; }
+})();
 render();
 animateEnter();
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {

@@ -289,7 +289,7 @@ bind.progreso = () => {
     toast(step ? `Peso guardado. Ajusté tu meta ${step > 0 ? '+' : ''}${r0(step)} kcal` : 'Peso guardado');
   });
   $$('[data-del-w]').forEach(b => b.addEventListener('click', () => {
-    state.weights = state.weights.filter(w => w.d !== b.dataset.delW); save(); render();
+    removeWithUndo(state.weights, w => w.d === b.dataset.delW, 'Peso eliminado');
   }));
   $('#autoAdj').addEventListener('change', e => {
     state.profile.autoAjuste = e.target.checked;

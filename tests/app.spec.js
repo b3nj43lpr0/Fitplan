@@ -203,3 +203,40 @@ test('Metas inteligentes: carbos en días de entreno, aviso de proteína y plan 
   });
   expect(n).toContain('prot');
 });
+
+test('Deshacer, buscar recetas por ingrediente y accesos directos', async ({ page }) => {
+  const n0 = (await today(page)).foods.length;
+  await page.click('[data-del-food]');
+  expect((await today(page)).foods.length).toBe(n0 - 1);
+  await page.click('.toast-undo');
+  expect((await today(page)).foods.length).toBe(n0);
+  await page.click('[data-view=recetas]');
+  await page.fill('#recSearch', 'pollo arroz');
+  await expect(page.locator('#recSearch')).toBeFocused();
+  await expect(page.locator('#recList .rcard').first()).toContainText('Tiene todo');
+  const w0 = (await today(page)).water;
+  await page.goto('/index.html?a=agua');
+  expect((await today(page)).water).toBe(w0 + 1);
+  expect(page.url()).not.toContain('?a=');
+  await page.goto('/index.html?a=entrenar');
+  await expect(page.locator('[data-tab-rut=rutina]')).toHaveClass(/active/);
+});
+
+test('sin señal: la app y la rutina funcionan sin conexión', async ({ page, context }) => {
+  await page.evaluate(() => navigator.serviceWorker.ready);
+  await page.reload();
+  expect(await page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
+  await page.click('[data-view=rutinas]');
+  await page.click('#genRoutine');
+  // Las imágenes de la rutina se guardan solas
+  await expect(page.locator('#offlineBox')).toContainText('Lista para entrenar sin señal', { timeout: 30000 });
+  await context.setOffline(true);
+  await page.reload();
+  await expect(page.locator('.hello .name')).toHaveText('Benja');
+  await page.click('[data-view=rutinas]');
+  await expect(page.locator('.day-list .ex').first()).toBeVisible();
+  const loaded = await page.$$eval('.day-list img.ex-thumb', imgs => Promise.all(imgs.map(i => i.decode().then(() => i.naturalWidth > 0, () => false))));
+  expect(loaded.length).toBeGreaterThan(0);
+  expect(loaded.every(Boolean)).toBe(true);
+  await context.setOffline(false);
+});

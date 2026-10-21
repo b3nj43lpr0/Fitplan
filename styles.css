@@ -658,3 +658,6 @@ body:has(.modal-back) .toast { bottom: auto; top: calc(16px + env(safe-area-inse
 .wk-badge { display: inline-block; font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 99px; background: var(--soft); margin-bottom: 8px; }
 .wk-badge.ss { background: color-mix(in srgb, var(--burn) 15%, transparent); color: var(--burn); }
 .hint-box { background: var(--accent-soft); color: var(--text); border-radius: 12px; padding: 10px 12px; font-size: 14px; margin: 10px 0; }
+.offline-box { margin-top: 10px; }
+.toast { display: flex; align-items: center; gap: 12px; justify-content: center; }
+.toast-undo { pointer-events: auto; border: 0; background: none; color: var(--accent-2); font-weight: 700; cursor: pointer; padding: 4px 2px; white-space: nowrap; }
