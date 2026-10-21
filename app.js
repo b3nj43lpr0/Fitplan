@@ -54,7 +54,7 @@ let currentDate = todayKey();
 let ui = {
   foodQuery: '', foodCat: 'Todas', selFood: null, meal: guessMeal(),
   recipeTab: 'recetas', recipeType: 'todas', recipeTag: 'todas', suggest: null,
-  rutTab: 'rutina', exQuery: '', exGroup: 'todos', exEquip: 'todos', sumRange: 7, cmp: [],
+  rutTab: 'rutina', exQuery: '', exGroup: 'todos', exEquip: 'todos', sumRange: 7, cmp: [], progTab: 'peso',
 };
 
 function load() {
@@ -309,7 +309,17 @@ function bodyFat(m, p) {
 
 // ---------- Navegación ----------
 $$('.nav button').forEach(b => b.addEventListener('click', () => go(b.dataset.view)));
+// Cualquier botón con data-go navega (delegado: sirve para todas las vistas y modales)
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-go]');
+  if (b) { e.preventDefault(); closeModal(); go(b.dataset.go); }
+});
+// Encabezado común de cada sección, con acceso a Perfil
+function pageHead(title, sub = '') {
+  return `<div class="page-head"><div><h1>${title}</h1>${sub ? `<p class="sub">${sub}</p>` : ''}</div><button class="round-btn" data-go="perfil" aria-label="Perfil y ajustes">⚙️</button></div>`;
+}
 function go(v) {
+  if (v === 'ejercicio') { ui.rutTab = 'actividad'; v = 'rutinas'; }
   view = v;
   render();
   window.scrollTo(0, 0);
@@ -344,7 +354,7 @@ const tap = () => { if (navigator.vibrate) navigator.vibrate(12); };
 function render() {
   const views = { hoy: viewHoy, comidas: viewComidas, ejercicio: viewEjercicio, recetas: viewRecetas, rutinas: viewRutinas, progreso: viewProgreso, perfil: viewPerfil };
   if (!state.profile && view !== 'perfil') view = 'perfil';
-  if (EX_VIEWS.includes(view) && !exReady()) {
+  if (EX_VIEWS.includes(view) && !(view === 'rutinas' && ui.rutTab === 'actividad') && !exReady()) {
     $('#main').innerHTML = '<div class="loading"><div class="spinner"></div><p class="muted">Cargando ejercicios…</p></div>';
     const v = view;
     loadExercises().then(() => { if (view === v) { render(); animateEnter(); } }).catch(() => {
@@ -459,13 +469,14 @@ function viewHoy() {
     const items = d.foods.filter(f => f.meal === m.id);
     const sum = items.reduce((a, f) => a + f.kcal, 0);
     const canRepeat = !items.length && prev.foods.some(f => f.meal === m.id);
-    return `<div class="meal"><div class="meal-head"><h3><span class="ico-c">${MEAL_ICO[m.id] || '🍽️'}</span>${m.name}</h3>${canRepeat ? `<button class="see" data-repeat="${m.id}">↺ Repetir de ayer</button>` : `<span class="muted small">${r0(sum)} kcal</span>`}</div>
+    return `<div class="meal"><div class="meal-head"><h3><span class="ico-c">${MEAL_ICO[m.id] || '🍽️'}</span>${m.name}${items.length ? ` <span class="muted small" style="font-weight:500">${r0(sum)} kcal</span>` : ''}</h3>
+      <div class="meal-acts">${canRepeat ? `<button class="see" data-repeat="${m.id}">↺ Ayer</button>` : ''}<button class="add-meal" data-add-meal="${m.id}" aria-label="Agregar a ${m.name}">＋</button></div></div>
       <div class="list">${items.length ? items.map(f => `
         <div class="item tappable" data-edit-food="${f.id}" tabindex="0" role="button">
           <div class="info"><div class="name">${esc(f.name)}</div><div class="muted small">${f.grams ? r0(f.grams) + ' g · ' : ''}P ${r0(f.p)} · C ${r0(f.c)} · G ${r0(f.g)}</div></div>
           <span class="kcal">${r0(f.kcal)}</span>
           <button class="icon-btn" data-del-food="${f.id}" aria-label="Eliminar">✕</button>
-        </div>`).join('') : '<div class="empty">Sin registros</div>'}</div></div>`;
+        </div>`).join('') : ''}</div></div>`;
   }).join('');
 
   const ex = d.exercises.length ? d.exercises.map(e => `
@@ -485,8 +496,6 @@ function viewHoy() {
       <span class="lbl">${parseKey(v.k).toLocaleDateString('es', { weekday: 'short' }).slice(0, 3)}</span>
     </div>`).join('');
 
-  const glasses = Array.from({ length: Math.max(tg.water, d.water) }, (_, i) =>
-    `<button class="glass ${i < d.water ? 'full' : ''}" data-water="${i + 1}" aria-label="Vaso ${i + 1}"></button>`).join('');
 
   // Lo que dice el plan semanal para hoy
   const planDay = state.plan ? state.plan.days.find(x => x.date === currentDate) : null;
@@ -522,12 +531,6 @@ function viewHoy() {
         ${tg.ajuste ? `<span class="pill">Ajuste automático ${tg.ajuste > 0 ? '+' : ''}${tg.ajuste} kcal</span>` : ''}
       </div>
     </div>
-    <div class="grid g4" style="margin-bottom:16px">
-      ${tile('Objetivo', r0(tg.kcal), 'kcal', '🎯')}
-      ${tile('Consumidas', r0(t.kcal), 'kcal', '🍽️', 'accent')}
-      ${tile('Quemadas', r0(t.burned), 'kcal', '🔥', 'burn')}
-      ${tile('Agua', d.water, `/ ${tg.water} vasos`, '💧')}
-    </div>
     <div class="card">
       <div class="row"><h2>Macros del día</h2><button class="see" data-go="recetas">Ver recetas ›</button></div>
       <div class="rings3">
@@ -549,9 +552,14 @@ function viewHoy() {
           <div class="row"><h2>Ejercicio</h2><button class="btn sm burn" data-go="ejercicio">+ Agregar</button></div>
           <div class="list">${ex}</div>
         </div>
-        <div class="card">
-          <div class="row"><h2>Agua</h2><span class="muted small">${d.water} / ${tg.water} vasos (250 ml)</span></div>
-          <div class="water">${glasses}</div>
+        <div class="card water-card">
+          <div class="row"><h2>💧 Agua</h2><span class="muted small">${(d.water * 0.25).toLocaleString('es')} de ${(tg.water * 0.25).toLocaleString('es')} L</span></div>
+          <div class="water-row">
+            <button class="round-btn" data-water-step="-1" aria-label="Quitar un vaso" ${d.water ? '' : 'disabled'}>−</button>
+            <div class="water-main"><div class="water-n"><b>${d.water}</b> / ${tg.water} vasos</div>
+              <div class="bar"><span style="width:${Math.min(100, d.water / tg.water * 100)}%;background:var(--water)"></span></div></div>
+            <button class="round-btn water-plus" data-water-step="1" aria-label="Agregar un vaso">＋</button>
+          </div>
         </div>
         <div class="card">
           <div class="row"><h2>Últimos 7 días</h2><button class="see" data-go="progreso">Ver progreso ›</button></div>
@@ -568,7 +576,6 @@ function viewHoy() {
 }
 bind.hoy = () => {
   bindDateBar();
-  $$('[data-go]').forEach(b => b.addEventListener('click', () => go(b.dataset.go)));
   $$('[data-del-food]').forEach(b => b.addEventListener('click', e => {
     e.stopPropagation();
     const d = day(); d.foods = d.foods.filter(f => f.id !== b.dataset.delFood); save(); render();
@@ -587,10 +594,12 @@ bind.hoy = () => {
   $$('[data-del-ex]').forEach(b => b.addEventListener('click', () => {
     const d = day(); d.exercises = d.exercises.filter(e => e.id !== b.dataset.delEx); save(); render();
   }));
-  $$('[data-water]').forEach(b => b.addEventListener('click', () => {
-    const d = day(); const n = Number(b.dataset.water);
-    d.water = d.water === n ? n - 1 : n; tap(); save(); render();
+  $$('[data-water-step]').forEach(b => b.addEventListener('click', () => {
+    const d = day();
+    d.water = Math.max(0, d.water + Number(b.dataset.waterStep)); tap(); save(); render();
+    if (d.water === calcTargets().water && b.dataset.waterStep === '1') { toast('💧 ¡Meta de agua cumplida!'); confetti(40); }
   }));
+  $$('[data-add-meal]').forEach(b => b.addEventListener('click', () => { ui.meal = b.dataset.addMeal; go('comidas'); }));
   $$('[data-dismiss]').forEach(b => b.addEventListener('click', () => { ui.dismissed = [...(ui.dismissed || []), b.dataset.dismiss]; render(); }));
   $$('[data-nudge]').forEach(b => b.addEventListener('click', () => {
     const [kind, arg] = b.dataset.nudge.split(':');
@@ -668,139 +677,174 @@ function addFoodToDay(food, grams, meal) {
   save();
   return n;
 }
-function viewComidas() {
-  const cats = ['Todas', FAV, RECENT, ...new Set(allFoods().map(f => f.cat))];
+function foodListHtml() {
   const q = norm(ui.foodQuery.trim());
   const base = ui.foodCat === FAV ? state.favFoods.map(foodById).filter(Boolean)
     : ui.foodCat === RECENT ? recentFoodIds().map(foodById)
       : allFoods().filter(f => ui.foodCat === 'Todas' || f.cat === ui.foodCat);
   const list = base.filter(f => !q || norm(f.name).includes(q));
-  const shown = list.slice(0, 120);
-  const sel = ui.selFood ? foodById(ui.selFood) : null;
-
+  const lim = ui.foodLimit || 40;
+  const shown = list.slice(0, lim);
+  const mealName = MEALS.find(m => m.id === ui.meal).name.toLowerCase();
+  return (shown.length ? shown.map(f => `
+    <div class="item food-row" data-food="${f.id}" role="button" tabindex="0">
+      <div class="info"><div class="name">${isFav(f.id) ? '<span class="star-on">★</span> ' : ''}${esc(f.name)}</div><div class="muted small">${f.por ? `porción ${f.por} g · ${r0(f.kcal * f.por / 100)} kcal` : `${r0(f.kcal)} kcal por 100 g`}</div></div>
+      <button class="quick-add" data-quick="${f.id}" aria-label="Agregar ${f.por || 100} g a ${mealName}" title="Agregar ${f.por || 100} g a ${mealName}">＋</button>
+    </div>`).join('') : `<div class="empty">${ui.foodCat === FAV ? 'Aún no tienes favoritas. Abre un alimento y toca ☆ para guardarlo aquí.' : ui.foodCat === RECENT ? 'Aquí aparecerá lo que registres.' : 'No encontré ese alimento. Escanéalo o créalo con los botones de arriba.'}</div>`)
+    + (list.length > shown.length ? `<button class="btn ghost" id="moreFoods" style="width:100%;margin-top:10px">Ver más (${list.length - shown.length})</button>` : '');
+}
+function viewComidas() {
+  const cats = ['Todas', FAV, RECENT, ...new Set(allFoods().map(f => f.cat))];
+  const tg = calcTargets();
+  const t = totals(peekDay(currentDate));
+  const left = tg.kcal + t.burned - t.kcal;
   return `
-    <h1>Comidas</h1>
-    <p class="sub">Busca entre ${allFoods().length} alimentos o escanea un producto, mira sus calorías y agrégalo a tu día.</p>
+    ${pageHead('Comidas')}
     ${dateBar()}
-    <div class="grid g2">
-      <div class="card">
-        <div class="search-row">
-          <input id="foodSearch" type="search" placeholder="Buscar: pollo, arroz, plátano…" value="${esc(ui.foodQuery)}" autocomplete="off">
-          <button class="btn" id="scanBtn" title="Escanear código de barras">📷 Escanear</button>
-        </div>
-        <div class="chips scroll-x">${cats.map(c => `<button class="chip ${c === ui.foodCat ? 'active' : ''}" data-cat="${esc(c)}">${esc(c)}</button>`).join('')}</div>
-        <div class="list scroll" id="foodList">
-          ${shown.length ? shown.map(f => `
-            <div class="item food-row ${ui.selFood === f.id ? 'sel' : ''}" data-food="${f.id}">
-              <div class="info"><div class="name">${isFav(f.id) ? '<span class="star-on">★</span> ' : ''}${esc(f.name)}</div><div class="muted small">por 100 g · P ${r1(f.p)} · C ${r1(f.c)} · G ${r1(f.g)}</div></div>
-              <span class="kcal">${r0(f.kcal)} <span class="muted small">kcal</span></span>
-              <button class="icon-btn quick-add" data-quick="${f.id}" aria-label="Agregar ${f.por || 100} g a ${esc(MEALS.find(m => m.id === ui.meal).name)}" title="Agregar ${f.por || 100} g">＋</button>
-            </div>`).join('') : `<div class="empty">${ui.foodCat === FAV ? 'Aún no tienes favoritas. Toca ☆ en un alimento para guardarlo aquí.' : ui.foodCat === RECENT ? 'Aquí aparecerá lo que registres.' : 'No encontré ese alimento. Puedes escanearlo o crearlo abajo.'}</div>`}
-          ${list.length > shown.length ? `<div class="empty">Mostrando 120 de ${list.length}. Escribe para filtrar.</div>` : ''}
-        </div>
+    <div class="left-bar"><span>${left >= 0 ? `Te quedan <b>${r0(left)} kcal</b>` : `Te pasaste <b>${r0(-left)} kcal</b>`}</span><span class="muted small">P ${r0(t.p)}/${r0(tg.prot)} g</span></div>
+    <div class="meal-pick" role="radiogroup" aria-label="Agregar a">${MEALS.map(m => `<button class="${m.id === ui.meal ? 'on' : ''}" data-pick-meal="${m.id}" role="radio" aria-checked="${m.id === ui.meal}"><span>${MEAL_ICO[m.id]}</span>${m.name}</button>`).join('')}</div>
+    <div class="card">
+      <div class="search-row">
+        <input id="foodSearch" type="search" placeholder="Buscar alimento…" value="${esc(ui.foodQuery)}" autocomplete="off">
+        <button class="round-btn" id="scanBtn" title="Escanear código de barras" aria-label="Escanear código de barras">📷</button>
       </div>
-      <div>
-        <div class="card" id="addBox">
-          ${sel ? `
-            <div class="row"><h2 style="margin:0">${esc(sel.name)}</h2><button class="icon-btn star ${isFav(sel.id) ? 'on' : ''}" id="favBtn" aria-pressed="${isFav(sel.id)}" aria-label="Favorita">${isFav(sel.id) ? '★' : '☆'}</button></div>
-            ${sel.brand ? `<p class="muted small" style="margin-top:-8px">${esc(sel.brand)}</p>` : ''}
-            <div class="chips">
-              <button class="chip" data-grams="100">100 g</button>
-              ${sel.por ? `<button class="chip" data-grams="${sel.por}">1 porción (${sel.por} g)</button><button class="chip" data-grams="${sel.por * 2}">2 porciones</button>` : ''}
-            </div>
-            <div class="grid g2" style="gap:10px">
-              <div class="field"><label for="grams">Cantidad (g)</label><input id="grams" type="number" min="1" value="${sel.por || 100}" inputmode="decimal"></div>
-              <div class="field"><label for="meal">Comida</label><select id="meal">${MEALS.map(m => `<option value="${m.id}" ${m.id === ui.meal ? 'selected' : ''}>${m.name}</option>`).join('')}</select></div>
-            </div>
-            <div class="result-box" id="preview"></div>
-            <button class="btn" id="addFood" style="width:100%">Agregar a ${esc(prettyDate(currentDate).toLowerCase())}</button>
-          ` : '<h2>Selecciona un alimento</h2><p class="muted">Toca cualquier alimento de la lista para ver cuántas calorías tiene según la cantidad.</p>'}
-        </div>
-        <div class="card">
-          <h2>Crear alimento propio</h2>
-          <p class="muted small" style="margin-top:-6px">Copia los datos de la etiqueta nutricional (por 100 g).</p>
-          <div class="field"><label for="cfName">Nombre</label><input id="cfName" placeholder="Ej: Barra de cereal X"></div>
-          <div class="grid g4" style="gap:8px">
-            <div class="field"><label for="cfKcal">kcal</label><input id="cfKcal" type="number" min="0"></div>
-            <div class="field"><label for="cfP">Prot.</label><input id="cfP" type="number" min="0"></div>
-            <div class="field"><label for="cfC">Carb.</label><input id="cfC" type="number" min="0"></div>
-            <div class="field"><label for="cfG">Grasa</label><input id="cfG" type="number" min="0"></div>
-          </div>
-          <button class="btn ghost" id="cfSave">Guardar alimento</button>
-        </div>
-        <div class="card">
-          <h2>Registro rápido</h2>
-          <p class="muted small" style="margin-top:-6px">¿Comiste algo y solo sabes las calorías?</p>
-          <div class="grid g2" style="gap:8px">
-            <div class="field"><label for="qName">Descripción</label><input id="qName" placeholder="Ej: Completo"></div>
-            <div class="field"><label for="qKcal">kcal</label><input id="qKcal" type="number" min="0"></div>
-          </div>
-          <button class="btn ghost" id="qAdd">Agregar</button>
-        </div>
-      </div>
+      <div class="chips scroll-x">${cats.map(c => `<button class="chip ${c === ui.foodCat ? 'active' : ''}" data-cat="${esc(c)}">${esc(c)}</button>`).join('')}</div>
+      <div class="list" id="foodList">${foodListHtml()}</div>
+    </div>
+    <div class="btn-row two">
+      <button class="btn ghost" id="quickLog">⚡ Solo sé las calorías</button>
+      <button class="btn ghost" id="newFood">＋ Crear alimento</button>
     </div>`;
+}
+// Hoja para elegir cantidad y comida de un alimento
+function openFoodSheet(id) {
+  const sel = foodById(id);
+  if (!sel) return;
+  openModal(`
+    <div class="sheet-title"><h2>${esc(sel.name)}</h2><button class="icon-btn star ${isFav(sel.id) ? 'on' : ''}" id="favBtn" aria-pressed="${isFav(sel.id)}" aria-label="Favorita">${isFav(sel.id) ? '★' : '☆'}</button></div>
+    <p class="muted small" style="margin:4px 0 12px">${sel.brand ? esc(sel.brand) + ' · ' : ''}${r0(sel.kcal)} kcal por 100 g · ${esc(sel.cat)}</p>
+    <div class="chips">
+      ${sel.por ? `<button class="chip active" data-grams="${sel.por}">1 porción (${sel.por} g)</button><button class="chip" data-grams="${sel.por / 2}">½</button><button class="chip" data-grams="${sel.por * 2}">2 porciones</button>` : ''}
+      <button class="chip ${sel.por ? '' : 'active'}" data-grams="100">100 g</button>
+    </div>
+    <div class="qty">
+      <button class="round-btn" data-step="-1" aria-label="Menos">−</button>
+      <div class="field" style="margin:0;flex:1"><input id="grams" type="number" min="1" value="${sel.por || 100}" inputmode="decimal" aria-label="Cantidad en gramos"><span class="unit-in">g</span></div>
+      <button class="round-btn" data-step="1" aria-label="Más">＋</button>
+    </div>
+    <div class="result-box" id="preview"></div>
+    <div class="meal-pick small-pick">${MEALS.map(m => `<button class="${m.id === ui.meal ? 'on' : ''}" data-sheet-meal="${m.id}">${MEAL_ICO[m.id]} ${m.name}</button>`).join('')}</div>
+    <button class="btn" id="addFood" style="width:100%">Agregar</button>`, m => {
+    const q = x => m.querySelector(x);
+    let meal = ui.meal;
+    const upd = () => {
+      const g = Number(q('#grams').value) || 0;
+      const n = nutrition(sel, g);
+      q('#preview').innerHTML = `<div class="row"><b style="font-size:24px">${r0(n.kcal)} kcal</b><span class="muted small">${r0(g)} g</span></div>
+        <div class="macro-pills" style="margin:6px 0 0"><span style="color:var(--prot)">P <b>${r1(n.p)} g</b></span><span style="color:var(--carb)">C <b>${r1(n.c)} g</b></span><span style="color:var(--fat)">G <b>${r1(n.g)} g</b></span></div>`;
+      m.querySelectorAll('[data-grams]').forEach(b => b.classList.toggle('active', Number(b.dataset.grams) === g));
+    };
+    q('#grams').addEventListener('input', upd);
+    m.querySelectorAll('[data-grams]').forEach(b => b.addEventListener('click', () => { q('#grams').value = b.dataset.grams; upd(); }));
+    m.querySelectorAll('[data-step]').forEach(b => b.addEventListener('click', () => {
+      const step = sel.por && sel.por < 60 ? sel.por : 10;
+      q('#grams').value = Math.max(1, (Number(q('#grams').value) || 0) + step * Number(b.dataset.step)); upd(); tap();
+    }));
+    m.querySelectorAll('[data-sheet-meal]').forEach(b => b.addEventListener('click', () => {
+      meal = b.dataset.sheetMeal;
+      m.querySelectorAll('[data-sheet-meal]').forEach(x => x.classList.toggle('on', x === b));
+    }));
+    q('#favBtn').addEventListener('click', () => {
+      state.favFoods = isFav(sel.id) ? state.favFoods.filter(x => x !== sel.id) : [...state.favFoods, sel.id];
+      save();
+      const b = q('#favBtn'); b.textContent = isFav(sel.id) ? '★' : '☆'; b.classList.toggle('on', isFav(sel.id));
+      toast(isFav(sel.id) ? 'Agregado a favoritas ⭐' : 'Quitado de favoritas');
+    });
+    upd();
+    q('#addFood').addEventListener('click', () => {
+      const g = Number(q('#grams').value);
+      if (!(g > 0)) return toast('Ingresa una cantidad válida');
+      ui.meal = meal;
+      const n = addFoodToDay(sel, g, meal);
+      closeModal(); render(); tap();
+      toast(`✓ ${sel.name} · ${r0(n.kcal)} kcal`);
+    });
+  });
 }
 bind.comidas = () => {
   bindDateBar();
-  const search = $('#foodSearch');
-  search.addEventListener('input', () => {
-    ui.foodQuery = search.value;
-    const pos = search.selectionStart;
-    render();
-    const s = $('#foodSearch'); s.focus(); s.setSelectionRange(pos, pos);
-  });
-  $('#scanBtn').addEventListener('click', openScanner);
-  $$('[data-cat]').forEach(b => b.addEventListener('click', () => { ui.foodCat = b.dataset.cat; render(); }));
-  $$('[data-quick]').forEach(b => b.addEventListener('click', e => {
-    e.stopPropagation();
-    const f = foodById(b.dataset.quick);
-    const n = addFoodToDay(f, f.por || 100, ui.meal);
-    toast(`+ ${f.name} (${r0(n.kcal)} kcal) en ${MEALS.find(m => m.id === ui.meal).name.toLowerCase()}`);
-    b.classList.add('pop'); tap(); setTimeout(() => b.classList.remove('pop'), 400);
-  }));
-  const fav = $('#favBtn');
-  if (fav) fav.addEventListener('click', () => {
-    const id = ui.selFood;
-    state.favFoods = isFav(id) ? state.favFoods.filter(x => x !== id) : [...state.favFoods, id];
-    save(); render(); toast(isFav(id) ? 'Agregado a favoritas ⭐' : 'Quitado de favoritas');
-  });
-  $$('[data-food]').forEach(r => r.addEventListener('click', () => {
-    ui.selFood = r.dataset.food; render();
-    if (window.innerWidth <= 760) $('#addBox').scrollIntoView({ behavior: 'smooth' });
-  }));
-  if ($('#grams')) {
-    const sel = foodById(ui.selFood);
-    const upd = () => {
-      const g = Number($('#grams').value) || 0;
-      const n = nutrition(sel, g);
-      $('#preview').innerHTML = `<div class="row"><b style="font-size:22px">${r0(n.kcal)} kcal</b><span class="muted small">${g} g</span></div>
-        <div class="macro-pills" style="margin:6px 0 0"><span>Proteína <b>${r1(n.p)} g</b></span><span>Carbs <b>${r1(n.c)} g</b></span><span>Grasa <b>${r1(n.g)} g</b></span></div>`;
-    };
-    $('#grams').addEventListener('input', upd);
-    $$('[data-grams]').forEach(b => b.addEventListener('click', () => { $('#grams').value = b.dataset.grams; upd(); }));
-    $('#meal').addEventListener('change', e => { ui.meal = e.target.value; render(); });
-    upd();
-    $('#addFood').addEventListener('click', () => {
-      const g = Number($('#grams').value);
-      if (!(g > 0)) return toast('Ingresa una cantidad válida');
-      const n = addFoodToDay(sel, g, $('#meal').value);
-      toast(`Agregado: ${sel.name} (${r0(n.kcal)} kcal)`); render();
+  const bindList = () => {
+    $$('[data-quick]').forEach(b => b.addEventListener('click', e => {
+      e.stopPropagation();
+      const f = foodById(b.dataset.quick);
+      const n = addFoodToDay(f, f.por || 100, ui.meal);
+      toast(`✓ ${f.name} · ${r0(n.kcal)} kcal en ${MEALS.find(m => m.id === ui.meal).name.toLowerCase()}`);
+      b.classList.add('pop'); tap(); setTimeout(() => b.classList.remove('pop'), 400);
+      const t = totals(peekDay(currentDate)), tg = calcTargets(), left = tg.kcal + t.burned - t.kcal;
+      $('.left-bar').innerHTML = `<span>${left >= 0 ? `Te quedan <b>${r0(left)} kcal</b>` : `Te pasaste <b>${r0(-left)} kcal</b>`}</span><span class="muted small">P ${r0(t.p)}/${r0(tg.prot)} g</span>`;
+    }));
+    $$('[data-food]').forEach(r => {
+      r.addEventListener('click', () => openFoodSheet(r.dataset.food));
+      r.addEventListener('keydown', ev => { if (ev.key === 'Enter') openFoodSheet(r.dataset.food); });
     });
-  }
-  $('#cfSave').addEventListener('click', () => {
-    const name = $('#cfName').value.trim();
-    const kcal = Number($('#cfKcal').value);
-    if (!name || $('#cfKcal').value === '' || !(kcal >= 0)) return toast('Completa al menos nombre y kcal');
-    const f = { id: 'c_' + uid(), name, cat: 'Mis alimentos', kcal, p: Number($('#cfP').value) || 0, c: Number($('#cfC').value) || 0, g: Number($('#cfG').value) || 0 };
-    state.customFoods.push(f); ui.selFood = f.id; ui.foodCat = 'Todas'; ui.foodQuery = '';
-    save(); toast('Alimento guardado'); render();
-  });
-  $('#qAdd').addEventListener('click', () => {
-    const kcal = Number($('#qKcal').value);
-    if (!(kcal > 0)) return toast('Ingresa las calorías');
-    day().foods.push({ id: uid(), name: $('#qName').value.trim() || 'Registro rápido', grams: 0, meal: ui.meal, kcal, p: 0, c: 0, g: 0 });
-    save(); toast('Agregado'); render();
-  });
+    const more = $('#moreFoods');
+    if (more) more.addEventListener('click', () => { ui.foodLimit = (ui.foodLimit || 40) + 60; refresh(); });
+  };
+  // Al buscar solo se redibuja la lista, así el teclado no se cierra
+  const refresh = () => { $('#foodList').innerHTML = foodListHtml(); bindList(); };
+  bindList();
+  $('#foodSearch').addEventListener('input', e => { ui.foodQuery = e.target.value; ui.foodLimit = 40; refresh(); });
+  $('#scanBtn').addEventListener('click', openScanner);
+  $$('[data-cat]').forEach(b => b.addEventListener('click', () => {
+    ui.foodCat = b.dataset.cat; ui.foodLimit = 40;
+    $$('[data-cat]').forEach(x => x.classList.toggle('active', x === b));
+    refresh();
+  }));
+  $$('[data-pick-meal]').forEach(b => b.addEventListener('click', () => {
+    ui.meal = b.dataset.pickMeal;
+    $$('[data-pick-meal]').forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-checked', x === b); });
+    refresh(); tap();
+  }));
+  $('#newFood').addEventListener('click', () => openModal(`
+    <h2>Crear alimento</h2>
+    <p class="muted small" style="margin-top:-6px">Copia los datos de la etiqueta nutricional (por 100 g).</p>
+    <div class="field"><label for="cfName">Nombre</label><input id="cfName" placeholder="Ej: Barra de cereal X"></div>
+    <div class="grid g4 keep" style="gap:8px">
+      <div class="field"><label for="cfKcal">kcal</label><input id="cfKcal" type="number" min="0" inputmode="decimal"></div>
+      <div class="field"><label for="cfP">Prot.</label><input id="cfP" type="number" min="0" inputmode="decimal"></div>
+      <div class="field"><label for="cfC">Carb.</label><input id="cfC" type="number" min="0" inputmode="decimal"></div>
+      <div class="field"><label for="cfG">Grasa</label><input id="cfG" type="number" min="0" inputmode="decimal"></div>
+    </div>
+    <div class="field"><label for="cfPor">Porción típica (g, opcional)</label><input id="cfPor" type="number" min="1" inputmode="decimal"></div>
+    <button class="btn" id="cfSave" style="width:100%">Guardar alimento</button>`, m => {
+    m.querySelector('#cfSave').addEventListener('click', () => {
+      const v = x => m.querySelector(x).value;
+      const name = v('#cfName').trim(), kcal = Number(v('#cfKcal'));
+      if (!name || v('#cfKcal') === '' || !(kcal >= 0)) return toast('Completa al menos nombre y kcal');
+      const f = { id: 'c_' + uid(), name, cat: 'Mis alimentos', kcal, p: Number(v('#cfP')) || 0, c: Number(v('#cfC')) || 0, g: Number(v('#cfG')) || 0 };
+      if (Number(v('#cfPor')) > 0) f.por = Number(v('#cfPor'));
+      state.customFoods.push(f); save(); closeModal(); render(); toast('Alimento guardado');
+      openFoodSheet(f.id);
+    });
+  }));
+  $('#quickLog').addEventListener('click', () => openModal(`
+    <h2>Registro rápido</h2>
+    <p class="muted small" style="margin-top:-6px">¿Comiste algo y solo sabes las calorías?</p>
+    <div class="field"><label for="qName">Qué comiste</label><input id="qName" placeholder="Ej: Completo"></div>
+    <div class="field"><label for="qKcal">kcal</label><input id="qKcal" type="number" min="0" inputmode="decimal"></div>
+    <div class="meal-pick small-pick">${MEALS.map(x => `<button class="${x.id === ui.meal ? 'on' : ''}" data-sheet-meal="${x.id}">${MEAL_ICO[x.id]} ${x.name}</button>`).join('')}</div>
+    <button class="btn" id="qAdd" style="width:100%">Agregar</button>`, m => {
+    let meal = ui.meal;
+    m.querySelectorAll('[data-sheet-meal]').forEach(b => b.addEventListener('click', () => { meal = b.dataset.sheetMeal; m.querySelectorAll('[data-sheet-meal]').forEach(x => x.classList.toggle('on', x === b)); }));
+    m.querySelector('#qAdd').addEventListener('click', () => {
+      const kcal = Number(m.querySelector('#qKcal').value);
+      if (!(kcal > 0)) return toast('Ingresa las calorías');
+      day().foods.push({ id: uid(), name: m.querySelector('#qName').value.trim() || 'Registro rápido', grams: 0, meal, kcal, p: 0, c: 0, g: 0 });
+      save(); closeModal(); render(); toast('Agregado');
+    });
+  }));
+  // Otro flujo (escáner, alimento nuevo) pidió abrir un alimento
+  if (ui.selFood) { const id = ui.selFood; ui.selFood = null; openFoodSheet(id); }
 };
 
 // ---------- Escáner de código de barras (Open Food Facts) ----------
@@ -904,8 +948,6 @@ function viewEjercicio() {
   const d = peekDay(currentDate);
   const t = totals(d);
   return `
-    <h1>Ejercicio</h1>
-    <p class="sub">Registra tu actividad y calcula las calorías que quemaste según tu peso (${r1(currentWeight())} kg).</p>
     ${dateBar()}
     <div class="grid g2">
       <div class="card">
@@ -933,14 +975,12 @@ function viewEjercicio() {
             <span class="kcal" style="color:var(--burn)">−${r0(e.kcal)}</span>
             <button class="icon-btn" data-del-ex="${e.id}" aria-label="Eliminar">✕</button>
           </div>`).join('') : '<div class="empty">Nada registrado todavía.</div>'}</div>
-        <p class="muted small">Las calorías del ejercicio se suman a tu presupuesto del día: si quemas 300 kcal, puedes comer 300 kcal más y mantener tu objetivo.</p>
-        <button class="btn ghost" data-go="rutinas">Ver mi rutina y la biblioteca de ejercicios →</button>
+        <p class="muted small">Las calorías del ejercicio se suman a tu presupuesto del día: si quemas 300 kcal, puedes comer 300 kcal más y mantener tu objetivo. Calculado con tu peso (${r1(currentWeight())} kg).</p>
       </div>
     </div>`;
 }
 bind.ejercicio = () => {
   bindDateBar();
-  $$('[data-go]').forEach(b => b.addEventListener('click', () => go(b.dataset.go)));
   const upd = () => {
     const a = ACTIVITIES.find(x => x.id === $('#act').value);
     const m = Number($('#mins').value) || 0;
@@ -1009,34 +1049,70 @@ function recipeScore(r, target) {
   if (p.dieta === 'lowcarb') s += (n.c * 4) / Math.max(1, n.kcal) * 0.6;
   return s;
 }
+const TAG_LABEL = { 'alta-proteina': 'Alta en proteína', vegetariana: 'Vegetariana', rapida: 'Rápida', economica: 'Económica' };
+const TIPO_ICO = { desayuno: '🍳', almuerzo: '🍲', cena: '🥗', snack: '🍎' };
+// Tarjeta compacta: tocarla abre el detalle
 function recipeCard(rec, factor = 1, note = '') {
   const n = recipeNutrition(rec, factor);
-  return `<div class="card recipe">
-    <div class="row"><h3 style="margin:0">${esc(rec.name)}</h3><b style="white-space:nowrap">${r0(n.kcal)} kcal</b></div>
-    <div class="tags"><span class="tag type">${rec.tipo}</span>${rec.tags.map(t => `<span class="tag">${t.replace('-', ' ')}</span>`).join('')}${factor !== 1 ? `<span class="tag neutral">porción ×${factor}</span>` : ''}</div>
-    ${note ? `<p class="muted small" style="margin:0 0 8px">${note}</p>` : ''}
-    <div class="macro-pills"><span style="color:var(--prot)">P <b>${r0(n.p)} g</b></span><span style="color:var(--carb)">C <b>${r0(n.c)} g</b></span><span style="color:var(--fat)">G <b>${r0(n.g)} g</b></span></div>
-    <details><summary>Ingredientes y preparación</summary>
-      <ul>${rec.ing.map(([id, g]) => { const f = foodById(id); return f ? `<li>${r0(g * factor)} g ${esc(f.name.toLowerCase())} <span class="muted small">(${r0(f.kcal * g * factor / 100)} kcal)</span></li>` : ''; }).join('')}</ul>
-      <ol>${rec.pasos.map(p => `<li>${esc(p)}</li>`).join('')}</ol>
-    </details>
-    <div class="btn-row">
-      <button class="btn sm" data-log-recipe="${rec.id}" data-factor="${factor}">Agregar a hoy</button>
-      ${rec.custom ? `<button class="btn ghost sm" data-edit-recipe="${rec.id}">✏️ Editar</button>` : `<a class="btn ghost sm" href="${ytUrl('receta ' + rec.name)}" target="_blank" rel="noopener">▶ Ver video</a>`}
+  return `<div class="rcard" data-open-recipe="${rec.id}" data-factor="${factor}" role="button" tabindex="0">
+    <div class="rc-ico">${TIPO_ICO[rec.tipo] || '🍽️'}</div>
+    <div class="rc-body">
+      <b>${esc(rec.name)}</b>
+      <span class="muted small">${r0(n.kcal)} kcal · P ${r0(n.p)} · C ${r0(n.c)} · G ${r0(n.g)}${factor !== 1 ? ` · porción ×${factor}` : ''}</span>
+      ${note ? `<span class="muted small">${note}</span>` : `<span class="rc-tags">${rec.custom ? '<span class="tag">Mía</span>' : ''}${rec.tags.slice(0, 2).map(t => `<span class="tag neutral">${TAG_LABEL[t] || t}</span>`).join('')}</span>`}
     </div>
+    <button class="quick-add" data-log-recipe="${rec.id}" data-factor="${factor}" aria-label="Agregar ${esc(rec.name)} a hoy" title="Agregar a hoy">＋</button>
   </div>`;
 }
+function logRecipe(rec, factor, mealId, dateKey = todayKey()) {
+  const n = recipeNutrition(rec, factor);
+  const grams = rec.ing.reduce((a, [, g]) => a + g * factor, 0);
+  day(dateKey).foods.push({ id: uid(), name: rec.name, grams, meal: mealId || rec.tipo, ...n });
+  save(); tap();
+  toast(`✓ ${rec.name} · ${r0(n.kcal)} kcal`);
+}
+function openRecipe(id, factor = 1) {
+  const rec = allRecipes().find(r => r.id === id);
+  if (!rec) return;
+  const n = recipeNutrition(rec, factor);
+  openModal(`
+    <div class="rc-hero">${TIPO_ICO[rec.tipo] || '🍽️'}</div>
+    <h2 style="padding-right:30px;margin-bottom:6px">${esc(rec.name)}</h2>
+    <div class="tags"><span class="tag type">${rec.tipo}</span>${rec.tags.map(t => `<span class="tag">${TAG_LABEL[t] || t}</span>`).join('')}${factor !== 1 ? `<span class="tag neutral">porción ×${factor}</span>` : ''}</div>
+    <div class="minis">
+      <div class="mini"><b>${r0(n.kcal)}</b><span>kcal</span></div>
+      <div class="mini"><b style="color:var(--prot)">${r0(n.p)} g</b><span>proteína</span></div>
+      <div class="mini"><b style="color:var(--carb)">${r0(n.c)} g</b><span>carbos</span></div>
+      <div class="mini"><b style="color:var(--fat)">${r0(n.g)} g</b><span>grasas</span></div>
+    </div>
+    <h3>Ingredientes</h3>
+    <ul class="ing">${rec.ing.map(([fid, g]) => { const f = foodById(fid); return f ? `<li><span>${esc(f.name)}</span><span class="muted">${r0(g * factor)} g</span></li>` : ''; }).join('')}</ul>
+    ${rec.pasos.length ? `<h3>Preparación</h3><ol class="steps">${rec.pasos.map(x => `<li>${esc(x)}</li>`).join('')}</ol>` : ''}
+    <div class="meal-pick small-pick">${MEALS.map(x => `<button class="${x.id === (MEALS.some(mm => mm.id === rec.tipo) ? rec.tipo : ui.meal) ? 'on' : ''}" data-sheet-meal="${x.id}">${MEAL_ICO[x.id]} ${x.name}</button>`).join('')}</div>
+    <div class="btn-row">
+      <button class="btn" id="rcAdd" style="flex:1">Agregar a hoy</button>
+      ${rec.custom ? `<button class="btn ghost" data-edit-recipe="${rec.id}">✏️ Editar</button>` : `<a class="btn ghost" href="${ytUrl('receta ' + rec.name)}" target="_blank" rel="noopener">▶ Video</a>`}
+    </div>`, m => {
+    let meal = MEALS.some(mm => mm.id === rec.tipo) ? rec.tipo : ui.meal;
+    m.querySelectorAll('[data-sheet-meal]').forEach(b => b.addEventListener('click', () => { meal = b.dataset.sheetMeal; m.querySelectorAll('[data-sheet-meal]').forEach(x => x.classList.toggle('on', x === b)); }));
+    m.querySelector('#rcAdd').addEventListener('click', () => { logRecipe(rec, factor, meal); closeModal(); if (view === 'hoy') render(); });
+    const ed = m.querySelector('[data-edit-recipe]');
+    if (ed) ed.addEventListener('click', () => recipeEditor(rec.id));
+  });
+}
 function bindLogRecipe(dateKey = todayKey()) {
-  $$('[data-log-recipe]').forEach(b => b.addEventListener('click', () => {
+  $$('[data-log-recipe]').forEach(b => b.addEventListener('click', e => {
+    e.stopPropagation();
     const rec = allRecipes().find(r => r.id === b.dataset.logRecipe);
-    const factor = Number(b.dataset.factor);
-    const n = recipeNutrition(rec, factor);
-    const grams = rec.ing.reduce((a, [, g]) => a + g * factor, 0);
-    const mealId = b.dataset.meal || rec.tipo;
-    day(dateKey).foods.push({ id: uid(), name: rec.name, grams, meal: mealId, ...n });
-    save(); toast(`Agregado: ${rec.name} (${r0(n.kcal)} kcal)`);
+    logRecipe(rec, Number(b.dataset.factor), b.dataset.meal, dateKey);
+    b.classList.add('pop'); setTimeout(() => b.classList.remove('pop'), 400);
     if (view === 'hoy') render();
   }));
+  $$('[data-open-recipe]').forEach(el => {
+    const open = () => openRecipe(el.dataset.openRecipe, Number(el.dataset.factor) || 1);
+    el.addEventListener('click', open);
+    el.addEventListener('keydown', ev => { if (ev.key === 'Enter') open(); });
+  });
 }
 // Crear o editar una receta propia: busca ingredientes y calcula las calorías al instante
 function recipeEditor(id) {
@@ -1102,9 +1178,7 @@ function recipeEditor(id) {
   });
 }
 function viewRecetas() {
-  const head = `<h1>Recetas</h1>
-    <p class="sub">${allRecipes().length} recetas con calorías calculadas, un plan semanal y tu lista de compras.</p>
-    ${tabs('rec', ui.recipeTab, [['recetas', 'Qué comer'], ['plan', 'Plan semanal'], ['compras', 'Lista de compras']])}`;
+  const head = pageHead('Recetas') + tabs('rec', ui.recipeTab, [['recetas', '🍽️ Qué comer'], ['plan', '🗓️ Plan'], ['compras', '🛒 Compras']]);
   if (ui.recipeTab === 'plan') return head + viewPlan();
   if (ui.recipeTab === 'compras') return head + viewCompras();
 
@@ -1114,20 +1188,19 @@ function viewRecetas() {
   const list = allRecipes().filter(r => (ui.recipeType === 'todas' || r.tipo === ui.recipeType) && (ui.recipeTag === 'todas' || (ui.recipeTag === 'mias' ? r.custom : r.tags.includes(ui.recipeTag))));
   const sugg = (ui.suggest || []).map(id => allRecipes().find(r => r.id === id)).filter(Boolean);
   return head + `
-    <div class="card" style="border-color:var(--accent)">
-      <div class="row" style="flex-wrap:wrap">
-        <div>
-          <h2 style="margin-bottom:4px">Tu próxima comida: ${meal.name.toLowerCase()}</h2>
-          <div class="muted small">${left > 0 ? `Te quedan ${r0(left)} kcal hoy. Para esta comida apunta a unas <b>${r0(target)} kcal</b>.` : 'Ya cubriste tus calorías de hoy; te sugiero opciones livianas.'}</div>
-        </div>
-        <button class="btn" id="suggestBtn">✨ Sugerirme recetas</button>
+    <div class="card next-meal">
+      <div>
+        <div class="muted small">Tu próxima comida · ${MEAL_ICO[meal.id]} ${meal.name.toLowerCase()}</div>
+        <b>${left > 0 ? `Apunta a unas ${r0(target)} kcal` : 'Ya cubriste tu meta: algo liviano'}</b>
       </div>
+      <button class="btn" id="suggestBtn">✨ Sugerir</button>
     </div>
-    ${sugg.length ? `<h2>Sugerencias para ti</h2><div class="grid g3">${sugg.map(r => recipeCard(r, scaleFactor(r, left > 0 ? target : 200), 'Porción ajustada a tus calorías restantes.')).join('')}</div>` : ''}
+    ${sugg.length ? `<h2>Sugerencias para ti</h2><div class="rgrid">${sugg.map(r => recipeCard(r, scaleFactor(r, left > 0 ? target : 200), 'Porción ajustada a lo que te queda hoy')).join('')}</div>` : ''}
     <div class="row" style="margin-top:8px"><h2 style="margin:0">Todas las recetas</h2><button class="btn sm" id="newRecipe">＋ Crear receta</button></div>
-    <div class="chips">${tipos.map(t => `<button class="chip ${t === ui.recipeType ? 'active' : ''}" data-rtype="${t}">${t === 'todas' ? 'Todas' : t[0].toUpperCase() + t.slice(1)}</button>`).join('')}</div>
-    <div class="chips">${tags.map(t => `<button class="chip ${t === ui.recipeTag ? 'active' : ''}" data-rtag="${t}">${t === 'todas' ? 'Cualquiera' : t === 'mias' ? '👩‍🍳 Mis recetas' : t.replace('-', ' ')}</button>`).join('')}</div>
-    <div class="grid g3">${list.map(r => recipeCard(r)).join('') || '<p class="muted">No hay recetas con esos filtros.</p>'}</div>`;
+    <div class="chips scroll-x">${tipos.map(t => `<button class="chip ${t === ui.recipeType ? 'active' : ''}" data-rtype="${t}">${t === 'todas' ? 'Todas' : (TIPO_ICO[t] || '') + ' ' + t[0].toUpperCase() + t.slice(1)}</button>`).join('')}</div>
+    <div class="chips scroll-x">${tags.map(t => `<button class="chip ${t === ui.recipeTag ? 'active' : ''}" data-rtag="${t}">${t === 'todas' ? 'Cualquiera' : t === 'mias' ? '👩‍🍳 Mis recetas' : TAG_LABEL[t]}</button>`).join('')}</div>
+    <p class="muted small" style="margin:4px 0 8px">${list.length} recetas</p>
+    <div class="rgrid">${list.map(r => recipeCard(r)).join('') || '<p class="muted">No hay recetas con esos filtros.</p>'}</div>`;
 }
 function generatePlan() {
   const tg = calcTargets();
@@ -1320,10 +1393,8 @@ function exThumb(e) {
   return `<img class="ex-thumb" loading="lazy" src="${EX_IMG_BASE + e.img[e.img.length - 1]}" alt="" onerror="this.style.visibility='hidden'">`;
 }
 function viewRutinas() {
-  const head = `<h1>Rutinas</h1>
-    <p class="sub">Genera tu rutina semanal o explora ${exDB().length} ejercicios con imágenes y técnica.</p>
-    ${tabs('rut', ui.rutTab, [['rutina', 'Mi rutina'], ['biblioteca', 'Biblioteca de ejercicios']])}`;
-  return head + (ui.rutTab === 'biblioteca' ? viewBiblioteca() : viewMiRutina());
+  const head = pageHead('Entrenar') + tabs('rut', ui.rutTab, [['rutina', '🏋️ Mi rutina'], ['actividad', '🔥 Actividad'], ['biblioteca', '📚 Ejercicios']]);
+  return head + (ui.rutTab === 'biblioteca' ? viewBiblioteca() : ui.rutTab === 'actividad' ? viewEjercicio() : viewMiRutina());
 }
 function viewMiRutina() {
   let r = state.routine;
@@ -1331,34 +1402,45 @@ function viewMiRutina() {
   const p = state.profile;
   const o = r || { objetivo: p.objetivo, nivel: 'principiante', dias: 3, equipo: 'gym', minutos: 45 };
   const kcalSesion = burnedKcal(o.objetivo === 'perder' ? 6 : 5, o.minutos);
-  return `
-    <div class="card">
-      <div class="grid g4" style="gap:10px">
-        <div class="field"><label for="rObj">Objetivo</label><select id="rObj">${Object.entries(GOALS).map(([k, g]) => `<option value="${k}" ${k === o.objetivo ? 'selected' : ''}>${g.label}</option>`).join('')}</select></div>
-        <div class="field"><label for="rNivel">Nivel</label><select id="rNivel">${['principiante', 'intermedio', 'avanzado'].map(n => `<option ${n === o.nivel ? 'selected' : ''}>${n}</option>`).join('')}</select></div>
-        <div class="field"><label for="rDias">Días por semana</label><select id="rDias">${[2, 3, 4, 5, 6].map(n => `<option ${n === Number(o.dias) ? 'selected' : ''}>${n}</option>`).join('')}</select></div>
-        <div class="field"><label for="rMin">Minutos por sesión</label><select id="rMin">${[30, 45, 60, 75].map(n => `<option ${n === Number(o.minutos) ? 'selected' : ''}>${n}</option>`).join('')}</select></div>
-      </div>
-      <div class="field" style="max-width:340px"><label for="rEq">Dónde entrenas</label><select id="rEq">${Object.entries(EQUIP_OPTS).map(([k, l]) => `<option value="${k}" ${o.equipo === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
-      <button class="btn" id="genRoutine">${r ? '🔄 Generar nueva rutina' : '✨ Generar rutina'}</button>
+  const cfg = `
+    <div class="grid g2 keep" style="gap:10px">
+      <div class="field"><label for="rObj">Objetivo</label><select id="rObj">${Object.entries(GOALS).map(([k, g]) => `<option value="${k}" ${k === o.objetivo ? 'selected' : ''}>${g.label}</option>`).join('')}</select></div>
+      <div class="field"><label for="rNivel">Nivel</label><select id="rNivel">${['principiante', 'intermedio', 'avanzado'].map(n => `<option value="${n}" ${n === o.nivel ? 'selected' : ''}>${n[0].toUpperCase() + n.slice(1)}</option>`).join('')}</select></div>
+      <div class="field"><label for="rDias">Días por semana</label><select id="rDias">${[2, 3, 4, 5, 6].map(n => `<option ${n === Number(o.dias) ? 'selected' : ''}>${n}</option>`).join('')}</select></div>
+      <div class="field"><label for="rMin">Minutos por sesión</label><select id="rMin">${[30, 45, 60, 75].map(n => `<option ${n === Number(o.minutos) ? 'selected' : ''}>${n}</option>`).join('')}</select></div>
     </div>
-    ${r ? `
-      <div class="row" style="margin-bottom:10px;flex-wrap:wrap"><h2 style="margin:0">Tu rutina (${r.dias} días · ${EQUIP_OPTS[r.equipo].toLowerCase()})</h2><span class="muted small">≈ ${r0(kcalSesion)} kcal por sesión</span></div>
-      <p class="muted small" style="margin-top:0">Calienta 5-10 min antes. Toca un ejercicio para ver cómo se hace. Si una serie se siente fácil, sube el peso o las repeticiones la semana siguiente.</p>
-      <div class="grid g2">${r.days.map((dd, i) => `
-        <div class="card day ${dd.done ? 'done' : ''}">
-          <h3 style="margin:0">Día ${i + 1}: ${esc(dd.name)}</h3>
-          <div style="margin:8px 0">${dd.exercises.map((x, j) => { const e = exById(x.ex); return e ? `
+    <div class="field"><label for="rEq">Dónde entrenas</label><select id="rEq">${Object.entries(EQUIP_OPTS).map(([k, l]) => `<option value="${k}" ${o.equipo === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+    <button class="btn" id="genRoutine" style="width:100%">${r ? '🔄 Generar nueva rutina' : '✨ Generar mi rutina'}</button>`;
+  if (!r) return `<div class="card"><h2>Arma tu rutina semanal</h2><p class="muted small" style="margin-top:-6px">Elige cómo entrenas y te armo los días con ejercicios, series y descansos.</p>${cfg}</div>`;
+  const done = r.days.filter(x => x.done).length;
+  const next = r.days.findIndex(x => !x.done);
+  const open = ui.openDay === undefined ? next : ui.openDay;
+  const ses = activeSession();
+  return `
+    <div class="card week-card">
+      <div class="week-top"><div><div class="muted small">${GOALS[r.objetivo].label} · ${EQUIP_OPTS[r.equipo]} · ≈ ${r0(kcalSesion)} kcal por sesión</div>
+        <b class="wk-title">Semana: ${done} de ${r.days.length} entrenamientos</b></div>
+        <button class="round-btn" id="cfgToggle" aria-label="Ajustar rutina" aria-expanded="${!!ui.rutCfg}">⚙️</button></div>
+      <div class="week-dots">${r.days.map((x, i) => `<span class="${x.done ? 'on' : i === next ? 'next' : ''}"></span>`).join('')}</div>
+      ${ui.rutCfg ? `<div class="cfg-box">${cfg}</div>` : ''}
+    </div>
+    ${r.days.map((dd, i) => { const isOpen = i === open; return `
+      <div class="card day ${dd.done ? 'done' : ''} ${isOpen ? 'open' : ''}">
+        <button class="day-head" data-toggle-day="${i}" aria-expanded="${isOpen}">
+          <span class="day-n">${dd.done ? '✓' : i + 1}</span>
+          <span class="day-t"><b>${esc(dd.name)}</b><span class="muted small">${dd.exercises.length} ejercicios · ${r.minutos} min${i === next ? ' · <b style="color:var(--accent)">te toca</b>' : ''}</span></span>
+          <span class="chev">›</span>
+        </button>
+        ${isOpen ? `
+          ${dd.done ? '' : `<button class="btn start-btn" data-start="${i}">▶ ${ses && ses.dayIdx === i ? 'Continuar' : 'Empezar'} entrenamiento</button>`}
+          <div class="day-list">${dd.exercises.map((x, j) => { const e = exById(x.ex); return e ? `
             <div class="ex" data-ex="${e.id}" data-slot="${i}:${j}" tabindex="0" role="button">
               ${exThumb(e)}
-              <span class="ex-name">${esc(e.n)}${x.finisher ? ' <span class="tag type">final</span>' : ''}${x.stretch ? ' <span class="tag neutral">estiramiento</span>' : ''}<span class="muted small">${esc(e.m.slice(0, 2).join(', '))}</span></span>
-              <span class="sr">${x.series} × ${x.reps}${x.rest !== '-' ? '<span class="rest">' + x.rest + '</span>' : ''}</span>
+              <span class="ex-name">${esc(e.n)}${x.finisher ? ' <span class="tag type">final</span>' : ''}${x.stretch ? ' <span class="tag neutral">estiramiento</span>' : ''}<span class="muted small">${x.series} × ${esc(x.reps)}${x.rest !== '-' ? ' · ' + esc(x.rest) : ''}</span></span>
             </div>` : ''; }).join('')}</div>
-          <div class="btn-row" style="margin:0">
-            ${dd.done ? '' : `<button class="btn sm" data-start="${i}">▶ ${activeSession() && activeSession().dayIdx === i ? 'Continuar' : 'Empezar'} entrenamiento</button>`}
-            <button class="btn sm ghost" data-done="${i}">${dd.done ? '✓ Hecho (desmarcar)' : 'Marcar como hecho'}</button>
-          </div>
-        </div>`).join('')}</div>` : ''}`;
+          <button class="see" data-done="${i}">${dd.done ? 'Desmarcar como hecho' : 'Ya lo hice: marcar como hecho'}</button>
+          <p class="muted small day-hint">Toca un ejercicio para ver la técnica o cambiarlo por otro.</p>` : ''}
+      </div>`; }).join('')}`;
 }
 function viewBiblioteca() {
   const groups = ['todos', 'pecho', 'espalda', 'piernas', 'hombros', 'brazos', 'core', 'cuerpo completo'];
@@ -1420,7 +1502,8 @@ function openExercise(id, slot) {
   });
 }
 bind.rutinas = () => {
-  $$('[data-tab-rut]').forEach(b => b.addEventListener('click', () => { ui.rutTab = b.dataset.tabRut; render(); }));
+  $$('[data-tab-rut]').forEach(b => b.addEventListener('click', () => { ui.rutTab = b.dataset.tabRut; render(); animateEnter(); }));
+  if (ui.rutTab === 'actividad') return bind.ejercicio();
   $$('[data-ex]').forEach(el => {
     const open = () => openExercise(el.dataset.ex, el.dataset.slot);
     el.addEventListener('click', open);
@@ -1441,9 +1524,17 @@ bind.rutinas = () => {
       objetivo: $('#rObj').value, nivel: $('#rNivel').value, dias: Number($('#rDias').value),
       equipo: $('#rEq').value, minutos: Number($('#rMin').value),
     });
+    ui.rutCfg = false; ui.openDay = undefined;
     save(); render(); toast('Rutina generada');
   });
-  $$('[data-done]').forEach(b => b.addEventListener('click', () => { setDayDone(Number(b.dataset.done)); save(); render(); }));
+  $$('[data-done]').forEach(b => b.addEventListener('click', () => { setDayDone(Number(b.dataset.done)); ui.openDay = undefined; save(); render(); }));
+  $$('[data-toggle-day]').forEach(b => b.addEventListener('click', () => {
+    const i = Number(b.dataset.toggleDay);
+    const cur = ui.openDay === undefined ? state.routine.days.findIndex(x => !x.done) : ui.openDay;
+    ui.openDay = cur === i ? -1 : i; render();
+  }));
+  const ct = $('#cfgToggle');
+  if (ct) ct.addEventListener('click', () => { ui.rutCfg = !ui.rutCfg; render(); });
   $$('[data-start]').forEach(b => b.addEventListener('click', () => startWorkout(Number(b.dataset.start))));
 };
 // Marca (o desmarca) un día de la rutina y suma el ejercicio a hoy
@@ -1690,8 +1781,8 @@ function strengthCard() {
       </div>`).join('')}</div>
       <p class="muted small">1RM = peso máximo estimado para 1 repetición. Toca un ejercicio para ver su evolución.</p>
       <h3>Últimos entrenamientos</h3>
-      <div class="list">${recent.map(w => `<div class="item"><div class="info"><div class="name">${esc(w.name)}</div><div class="muted small">${shortDate(w.d)} · ${w.minutes} min · ${w.ex.length} ejercicios</div></div><span class="kcal">${r0(w.ex.reduce((a, x) => a + x.sets.reduce((b, z) => b + z.kg * z.reps, 0), 0))} <span class="muted small">kg vol.</span></span></div>`).join('')}</div>`
-    : '<p class="muted">Usa <b>▶ Empezar entrenamiento</b> en Rutinas y registra el peso de cada serie. Aquí verás tus récords y cómo vas subiendo.</p>'}
+      <div class="list">${recent.map(w => `<div class="item"><div class="info"><div class="name">${esc(w.name)}</div><div class="muted small">${shortDate(w.d)} · ${w.minutes} min · ${w.ex.length} ${w.ex.length === 1 ? 'ejercicio' : 'ejercicios'}</div></div><span class="kcal">${r0(w.ex.reduce((a, x) => a + x.sets.reduce((b, z) => b + z.kg * z.reps, 0), 0))} <span class="muted small">kg vol.</span></span></div>`).join('')}</div>`
+    : '<p class="muted">Usa <b>▶ Empezar entrenamiento</b> en Entrenar y registra el peso de cada serie. Aquí verás tus récords y cómo vas subiendo.</p>'}
   </div>`;
 }
 function summaryCard() {
@@ -1718,7 +1809,7 @@ function summaryCard() {
   }).join('');
   return `<div class="card">
     <div class="row"><h2 style="margin:0">Resumen</h2>${tabs('sum', String(N), [['7', '7 días'], ['30', '30 días']])}</div>
-    <div class="grid g4" style="gap:10px;margin:12px 0">
+    <div class="grid g4 keep" style="gap:10px;margin:12px 0">
       ${tile('Promedio diario', r0(avg(x => x.t.kcal)), `/ ${r0(tg.kcal)} kcal`, '🍽️')}
       ${tile('Proteína promedio', r0(avg(x => x.t.p)), `/ ${r0(tg.prot)} g`, '🥩')}
       ${tile('Días en la meta', inGoal, `/ ${N}`, '🎯', 'accent')}
@@ -1816,10 +1907,12 @@ function viewProgreso() {
   const trend = weightTrend();
   const expected = GOALS[p.objetivo].rate;
   const change = ws.length ? ws[ws.length - 1].kg - ws[0].kg : 0;
-  return `
-    <h1>Progreso</h1>
-    <p class="sub">Registra tu peso y medidas. Con eso la app ajusta tu meta de calorías según cómo respondes de verdad.</p>
-    <div class="grid g4" style="margin-bottom:16px">
+  const head = pageHead('Progreso') + tabs('prog', ui.progTab, [['peso', '⚖️ Peso'], ['resumen', '📊 Resumen'], ['fuerza', '💪 Fuerza'], ['logros', '🏅 Logros']]);
+  if (ui.progTab === 'resumen') return head + summaryCard();
+  if (ui.progTab === 'fuerza') return head + strengthCard();
+  if (ui.progTab === 'logros') return head + badgesCard() + photosCard();
+  return head + `
+    <div class="grid g4 keep" style="margin-bottom:16px">
       <div class="stat"><div class="label">Peso actual</div><span class="tile-ico" aria-hidden="true">⚖️</span><div class="value">${r1(currentWeight())} <span class="unit">kg</span></div></div>
       <div class="stat"><div class="label">Cambio total</div><span class="tile-ico" aria-hidden="true">📉</span><div class="value">${ws.length ? (change > 0 ? '+' : '') + r1(change) : '—'} <span class="unit">kg</span></div></div>
       <div class="stat"><div class="label">Ritmo (últimas 4 semanas)</div><span class="tile-ico" aria-hidden="true">📈</span><div class="value">${trend === null ? '—' : (trend > 0 ? '+' : '') + r1(trend)} <span class="unit">kg/sem</span></div></div>
@@ -1829,12 +1922,14 @@ function viewProgreso() {
       <div>
         <div class="card">
           <h2>Registrar peso</h2>
-          <div class="grid g2" style="gap:10px">
-            <div class="field"><label for="wDate">Fecha</label><input id="wDate" type="date" value="${todayKey()}" max="${todayKey()}"></div>
-            <div class="field"><label for="wKg">Peso (kg)</label><input id="wKg" type="number" step="0.1" min="30" max="300" inputmode="decimal" value="${r1(currentWeight())}"></div>
+          <div class="qty">
+            <button class="round-btn" data-wstep="-0.1" aria-label="Menos 100 g">−</button>
+            <div class="field" style="margin:0;flex:1"><input id="wKg" type="number" step="0.1" min="30" max="300" inputmode="decimal" value="${r1(currentWeight())}" aria-label="Peso en kg"><span class="unit-in">kg</span></div>
+            <button class="round-btn" data-wstep="0.1" aria-label="Más 100 g">＋</button>
           </div>
+          <details class="mini-details"><summary>Otra fecha</summary><div class="field"><input id="wDate" type="date" value="${todayKey()}" max="${todayKey()}" aria-label="Fecha"></div></details>
           <button class="btn" id="addWeight" style="width:100%">Guardar peso</button>
-          <p class="muted small">Consejo: pésate en ayunas, después de ir al baño, 2-3 veces por semana.</p>
+          <p class="muted small">Pésate en ayunas, después de ir al baño, 2-3 veces por semana.</p>
         </div>
         <div class="card">
           <h2>Ajuste automático de la meta</h2>
@@ -1851,8 +1946,8 @@ function viewProgreso() {
           <div class="item"><div class="info"><div class="name">${shortDate(w.d)}</div></div><span class="kcal">${r1(w.kg)} kg</span><button class="icon-btn" data-del-w="${w.d}" aria-label="Eliminar">✕</button></div>`).join('')}</div>
       </div>
     </div>
-    <div class="card">
-      <h2>Medidas corporales</h2>
+    <details class="card fold"${ms.length ? '' : ''}>
+      <summary><h2 style="margin:0">Medidas corporales</h2><span class="muted small">${lastM ? `última: ${shortDate(lastM.d)}${bf ? ` · ${r1(bf)}% grasa` : ''}` : 'opcional'}</span></summary>
       <p class="muted small" style="margin-top:-6px">Con cintura y cuello${p.sexo === 'm' ? ' (y cadera)' : ''} estimo tu % de grasa (método de la Marina de EE.UU.). Mide en cm.</p>
       <div class="grid g4" style="gap:10px">
         <div class="field"><label for="mCint">Cintura (ombligo)</label><input id="mCint" type="number" step="0.5" inputmode="decimal" value="${lastM ? lastM.cintura || '' : ''}"></div>
@@ -1864,15 +1959,14 @@ function viewProgreso() {
       ${ms.length ? `<table class="tbl"><thead><tr><th>Fecha</th><th>Cintura</th><th>Cuello</th><th>Cadera</th><th>Brazo</th><th>% grasa</th></tr></thead><tbody>
         ${ms.slice(-6).reverse().map(m => { const b = bodyFat(m, p); return `<tr><td>${shortDate(m.d)}</td><td>${m.cintura || '—'}</td><td>${m.cuello || '—'}</td><td>${m.cadera || '—'}</td><td>${m.brazo || '—'}</td><td>${b ? r1(b) + '%' : '—'}</td></tr>`; }).join('')}
       </tbody></table>` : ''}
-    </div>
-    ${strengthCard()}
-    ${summaryCard()}
-    <div class="grid g2">${badgesCard()}${photosCard()}</div>`;
+    </details>`;
 }
 bind.progreso = () => {
+  $$('[data-tab-prog]').forEach(b => b.addEventListener('click', () => { ui.progTab = b.dataset.tabProg; render(); animateEnter(); }));
+  $$('[data-wstep]').forEach(b => b.addEventListener('click', () => { $('#wKg').value = r1((Number($('#wKg').value) || 0) + Number(b.dataset.wstep)); tap(); }));
   $$('[data-tab-sum]').forEach(b => b.addEventListener('click', () => { ui.sumRange = Number(b.dataset.tabSum); render(); }));
   paintPhotos();
-  $('#photoIn').addEventListener('change', async e => {
+  if ($('#photoIn')) $('#photoIn').addEventListener('change', async e => {
     const f = e.target.files[0];
     e.target.value = '';
     if (!f) return;
@@ -1893,6 +1987,7 @@ bind.progreso = () => {
     el.addEventListener('click', open);
     el.addEventListener('keydown', ev => { if (ev.key === 'Enter') open(); });
   });
+  if (ui.progTab !== 'peso') return;
   $('#addWeight').addEventListener('click', () => {
     const d = $('#wDate').value, kg = Number($('#wKg').value);
     if (!d || !(kg >= 30 && kg <= 300)) return toast('Revisa la fecha y el peso');
@@ -1933,19 +2028,19 @@ function viewPerfil() {
   const p = state.profile || { nombre: '', sexo: 'h', edad: 25, peso: 70, altura: 170, actividad: 1.375, objetivo: 'mantener', dieta: 'equilibrada' };
   const tg = state.profile ? calcTargets() : null;
   return `
-    <h1>${state.profile ? 'Perfil' : 'Bienvenido 👋'}</h1>
-    <p class="sub">${state.profile ? 'Actualiza tus datos para recalcular tus calorías.' : 'Completa tus datos para calcular cuántas calorías necesitas al día.'}</p>
+    <h1>${state.profile ? 'Perfil y ajustes' : 'Bienvenido 👋'}</h1>
+    <p class="sub">${state.profile ? 'Tus datos, tu meta, la apariencia y la sincronización.' : 'Completa tus datos para calcular cuántas calorías necesitas al día.'}</p>
     <div class="grid g2">
       <div class="card">
         <div class="field"><label for="pNombre">Nombre</label><input id="pNombre" value="${esc(p.nombre || '')}" placeholder="Opcional"></div>
-        <div class="grid g2" style="gap:10px">
+        <div class="grid g2 keep" style="gap:10px">
           <div class="field"><label for="pSexo">Sexo</label><select id="pSexo"><option value="h" ${p.sexo === 'h' ? 'selected' : ''}>Hombre</option><option value="m" ${p.sexo === 'm' ? 'selected' : ''}>Mujer</option></select></div>
           <div class="field"><label for="pEdad">Edad</label><input id="pEdad" type="number" min="12" max="100" value="${p.edad}"></div>
           <div class="field"><label for="pPeso">Peso (kg)</label><input id="pPeso" type="number" min="30" max="300" step="0.1" value="${state.profile ? r1(currentWeight()) : p.peso}"></div>
           <div class="field"><label for="pAltura">Altura (cm)</label><input id="pAltura" type="number" min="120" max="230" value="${p.altura}"></div>
         </div>
         <div class="field"><label for="pAct">Nivel de actividad</label><select id="pAct">${ACTIVITY_LEVELS.map(a => `<option value="${a.v}" ${a.v === Number(p.actividad) ? 'selected' : ''}>${a.label}</option>`).join('')}</select></div>
-        <div class="grid g2" style="gap:10px">
+        <div class="grid g2 keep" style="gap:10px">
           <div class="field"><label for="pObj">Objetivo</label><select id="pObj">${Object.entries(GOALS).map(([k, g]) => `<option value="${k}" ${k === p.objetivo ? 'selected' : ''}>${g.label}</option>`).join('')}</select></div>
           <div class="field"><label for="pDieta">Tipo de dieta</label><select id="pDieta">${Object.entries(DIETS).map(([k, d]) => `<option value="${k}" ${k === (p.dieta || 'equilibrada') ? 'selected' : ''}>${d.label}</option>`).join('')}</select></div>
         </div>
@@ -1955,7 +2050,7 @@ function viewPerfil() {
         ${tg ? `
         <div class="card">
           <h2>Tus números</h2>
-          <div class="grid g2" style="gap:10px">
+          <div class="grid g2 keep" style="gap:10px">
             <div class="stat"><div class="label">Metabolismo basal</div><span class="tile-ico" aria-hidden="true">🫀</span><div class="value">${r0(tg.bmr)} <span class="unit">kcal</span></div></div>
             <div class="stat"><div class="label">Gasto diario (TDEE)</div><span class="tile-ico" aria-hidden="true">⚡</span><div class="value">${r0(tg.tdee)} <span class="unit">kcal</span></div></div>
             <div class="stat accent"><div class="label">Objetivo diario</div><span class="tile-ico" aria-hidden="true">🎯</span><div class="value">${r0(tg.kcal)} <span class="unit">kcal</span></div></div>
@@ -1965,8 +2060,8 @@ function viewPerfil() {
           <p class="muted small">Cálculo con la fórmula Mifflin-St Jeor. Es una estimación: activa el ajuste automático en Progreso para que se corrija con tu peso real.</p>
         </div>` : ''}
         <div class="card">
-          <h2>Tus datos</h2>
-          <p class="muted small" style="margin-top:-6px">Todo se guarda en este dispositivo. Usa exportar/importar para pasar tus datos del PC al teléfono.</p>
+          <h2>Respaldo</h2>
+          <p class="muted small" style="margin-top:-6px">Descarga una copia de respaldo de todos tus datos o restaura una copia anterior.</p>
           <div class="btn-row">
             <button class="btn ghost sm" id="exportBtn">⬇ Exportar</button>
             <label class="btn ghost sm" style="margin:0;color:var(--text)">⬆ Importar<input type="file" id="importFile" accept="application/json" hidden></label>
@@ -2064,7 +2159,8 @@ bind.perfil = () => {
   let x0 = null, y0 = 0, t0 = 0;
   const main = $('#main');
   main.addEventListener('touchstart', e => {
-    if (!['hoy', 'comidas', 'ejercicio'].includes(view) || $('.modal-back')) { x0 = null; return; }
+    const dayView = view === 'hoy' || view === 'comidas' || (view === 'rutinas' && ui.rutTab === 'actividad');
+    if (!dayView || $('.modal-back')) { x0 = null; return; }
     if (e.target.closest('input, select, textarea, .scroll-x, .chips, .list.scroll, .act-grid')) { x0 = null; return; }
     x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; t0 = Date.now();
   }, { passive: true });
