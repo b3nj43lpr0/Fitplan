@@ -3,7 +3,7 @@
   "private": true,
   "description": "Pruebas automáticas de FitPlan (la app no necesita compilación)",
   "scripts": {
-    "test": "node tests/sync.test.js && playwright test"
+    "test": "node tests/sync.test.js && node tests/coach-ai.test.js && playwright test"
   },
   "devDependencies": {
     "@playwright/test": "1.56.1",
