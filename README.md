@@ -48,6 +48,10 @@ Los datos se guardan en tu cuenta de Firebase y se actualizan en todos tus dispo
 - **Diseño**: tema claro, oscuro o automático y 5 colores a elección (Perfil → Apariencia), animaciones, confeti en logros y entrenamientos, y deslizar el dedo en Hoy, Comidas o Ejercicio para cambiar de día.
 - **Recordatorios**: avisos en Hoy según la hora (comidas sin registrar, agua, entrenamiento pendiente) con botón de acción directa.
 
+## Pruebas automáticas
+
+Cada cambio corre `npm test` en GitHub (pruebas de la app en un navegador con tamaño de teléfono y una simulación de sincronización entre dos dispositivos). Si algo falla, la app publicada no cambia. Para correrlas en tu PC: `npm install`, `npx playwright install chromium` y `npm test`.
+
 ## Archivos
 
 - `index.html`, `styles.css`, `app.js`: la app.

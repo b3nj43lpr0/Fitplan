@@ -1,0 +1,12 @@
+{
+  "name": "fitplan",
+  "private": true,
+  "description": "Pruebas automáticas de FitPlan (la app no necesita compilación)",
+  "scripts": {
+    "test": "node tests/sync.test.js && playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.56.1",
+    "http-server": "14.1.1"
+  }
+}
