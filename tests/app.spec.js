@@ -240,3 +240,53 @@ test('sin señal: la app y la rutina funcionan sin conexión', async ({ page, co
   expect(loaded.every(Boolean)).toBe(true);
   await context.setOffline(false);
 });
+
+test('Íconos de comidas según el alimento', async ({ page }) => {
+  const icons = await page.evaluate(() => ['Pechuga de pollo asada (sin piel)', 'Repollo', 'Pan amasado', 'Espinaca cruda', 'Empanada de pino (horno)', 'Tallarines con salsa boloñesa']
+    .map(n => foodIcon(allFoods().find(f => f.name === n))));
+  expect(icons).toEqual(['🍗', '🥬', '🍞', '🥬', '🥟', '🍝']);
+  await expect(page.locator('.meal .fi').first()).toBeVisible();
+  await page.click('[data-view=comidas]');
+  await expect(page.locator('#foodList .fi').first()).toHaveText('🍗');
+});
+
+test('Más entrenamientos: tipos de rutina y entrenamiento suelto', async ({ page }) => {
+  await page.click('[data-view=rutinas]');
+  await page.waitForSelector('#genRoutine');
+  for (const [prog, dias, first] of [['ppl', 3, 'Empuje'], ['bro', 5, 'Pecho'], ['gluteos', 3, 'Glúteos'], ['fuerza', 2, 'Fuerza A'], ['circuito', 3, 'Circuito A'], ['torso', 4, 'Torso']]) {
+    if (!(await page.locator('#rProg').count())) await page.click('#cfgToggle');
+    await page.selectOption('#rProg', prog);
+    await page.selectOption('#rDias', String(dias));
+    await page.selectOption('#rEq', 'gym');
+    await page.click('#genRoutine');
+    const r = (await state(page)).routine;
+    expect(r.programa).toBe(prog);
+    expect(r.days).toHaveLength(dias);
+    expect(r.days[0].name).toContain(first);
+    expect(r.days.every(d => d.exercises.filter(x => !x.warm && !x.stretch).length >= 3)).toBe(true);
+  }
+  // La rutina de fuerza usa los básicos con barra a 5×5
+  await page.click('#cfgToggle');
+  await page.selectOption('#rProg', 'fuerza');
+  await page.selectOption('#rDias', '3');
+  await page.click('#genRoutine');
+  const f = (await state(page)).routine.days[0].exercises.filter(x => !x.warm && !x.stretch);
+  expect(f.map(x => x.ex).slice(0, 3)).toEqual(['squat', 'bench-press', 'barbell-row']);
+  expect(f[0]).toMatchObject({ series: 5, reps: '5' });
+  // Fuera del gimnasio la de fuerza no aplica
+  await page.click('#cfgToggle');
+  await page.selectOption('#rEq', 'casa');
+  await page.click('#genRoutine');
+  expect((await state(page)).routine.programa).toBe('auto');
+  // Entrenamiento suelto: no cambia la rutina y suma la actividad del día
+  const before = JSON.stringify((await state(page)).routine);
+  await page.click('[data-quick-w=core]');
+  await page.click('#qkNew');
+  await page.click('#qkGo');
+  await page.click('[data-set="0"]');
+  while (await page.locator('#wNext').count()) await page.click('#wNext');
+  await page.click('#wFinish');
+  await page.click('#okW');
+  expect(JSON.stringify((await state(page)).routine)).toBe(before);
+  expect((await today(page)).exercises.some(e => e.name === 'Entrenamiento: Core 15 min')).toBe(true);
+});

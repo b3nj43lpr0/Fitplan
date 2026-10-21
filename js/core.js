@@ -114,6 +114,59 @@ const norm = s => String(s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '
 const $ = sel => document.querySelector(sel);
 const $$ = sel => document.querySelectorAll(sel);
 const shuffle = a => a.map(x => [Math.random(), x]).sort((p, q) => p[0] - q[0]).map(x => x[1]);
+// ---------- Íconos de comidas ----------
+// Por palabra clave del nombre (sin tildes). El orden importa: primero platos, después ingredientes.
+const FOOD_ICONS = [
+  [/empanada/, '🥟'], [/completo|hot dog|vienesa|salchicha/, '🌭'], [/hamburguesa/, '🍔'], [/pizza/, '🍕'],
+  [/sushi|handroll/, '🍣'], [/taco|burrito|quesadilla|enchilada|chilaquiles|nachos/, '🌮'], [/shawarma/, '🥙'],
+  [/sandwich|barros|chacarero|lomito|churrasco|ave palta|choripan/, '🥪'],
+  [/(^|\s)sopa(\s|$)|cazuela|caldillo|carbonada|chupe|paila|charquican|porotos con riendas|porotos granados|guisad/, '🍲'],
+  [/ensalada|bowl/, '🥗'], [/chorrillana|papas fritas/, '🍟'], [/pastel de choclo|humita|choclo|maiz|chuchoca/, '🌽'],
+  [/tallarin|pasta|fideo|noqui|ravioles|lasana|cuscus/, '🍝'], [/curry|teriyaki|lomo saltado/, '🍛'],
+  [/panqueque|waffle|tostadas francesas/, '🥞'], [/croissant/, '🥐'], [/bagel/, '🥯'],
+  [/torta|kuchen|queque|brownie|pie |pan de pascua|muffin|alfajor|tres leches|mil hojas/, '🍰'],
+  [/flan|leche asada|arroz con leche|pudding|gelatina/, '🍮'], [/helado/, '🍦'], [/donut|berlin|churro|calzones|sopaipilla pasada/, '🍩'],
+  [/galleta|oblea|oreo/, '🍪'], [/chocolate|cacao|barra/, '🍫'], [/gomita|mani confitado/, '🍬'], [/miel|mermelada|manjar|^azucar|mote con huesillo/, '🍯'],
+  [/cafe/, '☕'], [/^te$|^te /, '🍵'], [/cerveza/, '🍺'], [/vino|terremoto/, '🍷'], [/pisco|destilado/, '🥃'],
+  [/batido|smoothie|whey/, '🥤'], [/bebida|cola|jugo|isotonica|energetica|kombucha/, '🧃'], [/coco/, '🥥'], [/^agua/, '💧'],
+  [/omelette|tortilla espanola|tortilla de verduras|huevo|clara|yema|ranchero/, '🍳'],
+  [/yogur|kefir|leche|cultivada/, '🥛'], [/queso|quesillo|cottage|ricotta/, '🧀'],
+  [/salmon|atun|merluza|reineta|tilapia|jurel|caballa|sardina|pescado|congrio|ceviche|kanikama/, '🐟'],
+  [/camaron|calamar|pulpo|chorito|mejillon|almeja|macha|jaiba|cangrejo|marisco/, '🦐'],
+  [/tocino|jamon|salame|chorizo|longaniza|prieta/, '🥓'], [/\bpollo|\bpavo|\bave |alitas|trutro|muslo|nugget|gallina/, '🍗'],
+  [/carne|vacuno|filete|posta|lomo|\basado|costill|cerdo|chuleta|cordero|higado|anticucho|milanesa|pernil/, '🥩'],
+  [/arroz|gallo pinto/, '🍚'], [/avena|granola|cereal/, '🥣'], [/arepa|tamal|pupusa|tortilla/, '🫓'], [/quinoa|harina|\bmote|trigo/, '🌾'], [/pan|marraqueta|hallulla|sopaipilla|galletas de agua/, '🍞'],
+  [/zapallo|calabaza/, '🎃'], [/\bpapas?\b|camote|yuca|pure|noqui/, '🥔'],
+  [/mayonesa|ketchup|mostaza|salsa|pesto|vinagre|pebre|alino/, '🥫'],
+  [/lenteja|garbanzo|poroto|arveja|edamame|soya|tofu|hummus/, '🫘'],
+  [/mani|almendra|nuez|nueces|castana|pistacho|avellana|semilla|chia|linaza|sesamo/, '🥜'],
+  [/aceituna|aceite de oliva/, '🫒'], [/mantequilla|margarina|aceite/, '🧈'],
+  [/palta|aguacate/, '🥑'], [/platano/, '🍌'], [/manzana/, '🍎'], [/naranja|mandarina|pomelo/, '🍊'], [/limon/, '🍋'], [/pera|membrillo/, '🍐'],
+  [/uva|pasas/, '🍇'], [/frutilla|fresa/, '🍓'], [/arandano|frambuesa|\bmoras?\b|murta/, '🫐'], [/cereza|granada/, '🍒'],
+  [/durazno|damasco|huesillo|ciruela/, '🍑'], [/kiwi/, '🥝'], [/\bpina\b/, '🍍'], [/mango|papaya|lucuma|chirimoya|maracuya|guayaba/, '🥭'], [/^tuna/, '🌵'],
+  [/sandia/, '🍉'], [/melon|pepino dulce/, '🍈'], [/tomate/, '🍅'], [/pepino|zapallito|zapallo italiano|calabacin/, '🥒'],
+  [/zanahoria/, '🥕'], [/ajo/, '🧄'], [/cebolla|cebollin/, '🧅'], [/aji|chile/, '🌶️'], [/pimenton/, '🫑'],
+  [/brocoli|coliflor|repollito/, '🥦'], [/lechuga|espinaca|acelga|rucula|kale|repollo|cochayuyo|apio|esparrago|alcachofa|palmito/, '🥬'],
+  [/champinon/, '🍄'], [/berenjena/, '🍆'], [/betarraga|remolacha|rabanito/, '🫜'],
+  [/palomitas|cabritas|ramitas|pretzel|papas fritas de bolsa/, '🍿'],
+];
+const CAT_ICO = { 'Carnes y aves': '🥩', 'Pescados y mariscos': '🐟', 'Huevos y lácteos': '🥛', 'Cereales y panes': '🍞', 'Tubérculos': '🥔', 'Legumbres': '🫘', 'Verduras': '🥬', 'Frutas': '🍎', 'Frutos secos y semillas': '🥜', 'Grasas y aceites': '🧈', 'Bebidas': '🧃', 'Dulces y snacks': '🍫', 'Comida rápida': '🍔', 'Condimentos y salsas': '🥫', 'Platos chilenos y latinos': '🍲', 'Mis alimentos': '⭐' };
+function iconFor(name) {
+  const n = norm(name);
+  const hit = FOOD_ICONS.find(([re]) => re.test(n));
+  return hit ? hit[1] : null;
+}
+function foodIcon(f) { return (f && (iconFor(f.name) || CAT_ICO[f.cat])) || '🍽️'; }
+// Ícono de un registro del día: por su alimento, o por el nombre si fue receta o registro rápido
+function entryIcon(e) { const f = e.foodId && foodById(e.foodId); return f ? foodIcon(f) : (iconFor(e.name) || recipeIconByName(e.name) || '🍽️'); }
+function recipeIconByName(name) { const r = allRecipes().find(x => x.name === name); return r ? recipeIcon(r) : null; }
+// Receta: primero por su nombre; si no, por el ingrediente con más gramos
+function recipeIcon(rec) {
+  const byName = iconFor(rec.name);
+  if (byName) return byName;
+  const main = [...rec.ing].sort((a, b) => b[1] - a[1]).map(([id]) => foodById(id)).find(f => f && !/agua|aceite|leche descremada/i.test(f.name));
+  return main ? foodIcon(main) : '🍽️';
+}
 function allRecipes() { return [...RECIPES, ...state.customRecipes]; }
 function allFoods() { return [...FOODS, ...state.customFoods]; }
 function foodById(id) { return allFoods().find(f => f.id === id); }
