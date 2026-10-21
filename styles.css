@@ -710,3 +710,10 @@ body:has(.modal-back) .toast { bottom: auto; top: calc(16px + env(safe-area-inse
 .fast-card.on { border-color: var(--accent); }
 .fast-t { font-size: 34px; font-weight: 800; font-variant-numeric: tabular-nums; margin: 4px 0 8px; }
 .label-btn { display: block; text-align: center; cursor: pointer; }
+
+/* ---------- Cronómetro de cardio e historial ---------- */
+.cardio.on { border-color: var(--burn); }
+.cd-clock { font-size: 52px; font-weight: 800; font-variant-numeric: tabular-nums; text-align: center; line-height: 1.1; margin: 8px 0 4px; }
+.cd-kcal { text-align: center; color: var(--burn); margin-bottom: 14px; }
+.hist { display: grid; gap: 4px; margin-top: 8px; }
+.hist-row { display: grid; grid-template-columns: 80px 1fr auto; gap: 8px; align-items: center; font-size: 13px; padding: 6px 8px; background: var(--soft); border-radius: 10px; }

@@ -244,10 +244,12 @@ function viewMiRutina() {
   return `
     <div class="card week-card">
       <div class="week-top"><div><div class="muted small">${(PROGRAMS[r.programa] || PROGRAMS.auto).label} · ${EQUIP_OPTS[r.equipo]} · ≈ ${r0(kcalSesion)} kcal por sesión</div>
-        <b class="wk-title">Semana: ${done} de ${r.days.length} entrenamientos</b></div>
+        <b class="wk-title">Semana ${r.week || 1}: ${done} de ${r.days.length} entrenamientos</b></div>
         <button class="round-btn" id="cfgToggle" aria-label="Ajustar rutina" aria-expanded="${!!ui.rutCfg}">⚙️</button></div>
       <div class="week-dots">${r.days.map((x, i) => `<span class="${x.done ? 'on' : i === next ? 'next' : ''}"></span>`).join('')}</div>
       ${offlineOk() ? '<div id="offlineBox" class="offline-box"></div>' : ''}
+      ${r.deload ? '<div class="warn-box info">🧘 <b>Semana de descarga.</b> Tras 4 semanas de carga, esta semana haces menos series y un poco menos de peso: así el cuerpo se recupera y después vuelves más fuerte. <button class="see" id="skipDeload">Saltarla</button></div>'
+        : `<p class="muted small" style="margin:8px 0 0">Próxima semana de descarga: semana ${Math.ceil(((r.week || 1) + 1) / DELOAD_EVERY) * DELOAD_EVERY}</p>`}
       ${ui.rutCfg ? `<div class="cfg-box">${cfg}</div>` : ''}
     </div>
     ${r.days.map((dd, i) => { const isOpen = i === open; return `
@@ -405,6 +407,8 @@ bind.rutinas = () => {
     const cur = ui.openDay === undefined ? state.routine.days.findIndex(x => !x.done) : ui.openDay;
     ui.openDay = cur === i ? -1 : i; render();
   }));
+  const sd = $('#skipDeload');
+  if (sd) sd.addEventListener('click', () => { state.routine.deload = false; save(); render(); toast('Descarga saltada: semana normal'); });
   const ct = $('#cfgToggle');
   if (ct) ct.addEventListener('click', () => { ui.rutCfg = !ui.rutCfg; render(); });
   $$('[data-start]').forEach(b => b.addEventListener('click', () => startWorkout(Number(b.dataset.start))));
@@ -425,7 +429,28 @@ function setDayDone(i, minutes) {
   } else {
     d.exercises = d.exercises.filter(e => e.tag !== tag);
   }
-  if (r.days.every(x => x.done)) { r.days.forEach(x => { x.done = false; }); toast('¡Semana completa! La rutina se reinició 🎉'); }
+  if (r.days.every(x => x.done)) {
+    r.days.forEach(x => { x.done = false; });
+    // Cada 4 semanas de carga viene 1 de descarga para recuperarse
+    const wasDeload = r.deload;
+    r.week = (r.week || 1) + 1;
+    r.deload = !wasDeload && r.week % DELOAD_EVERY === 0;
+    toast(r.deload ? '¡Semana completa! La próxima es de descarga 🧘' : '¡Semana completa! Empieza la semana ' + r.week + ' 🎉');
+  }
+}
+const DELOAD_EVERY = 5; // 4 semanas de carga + 1 de descarga
+const deloadOn = () => !!(state.routine && state.routine.deload);
+// En descarga: ~60 % de las series y ~90 % del peso
+const deloadSeries = x => (x.warm || x.stretch) ? x.series : Math.max(2, Math.round(x.series * 0.6));
+const round25 = kg => Math.round(kg / 2.5) * 2.5 || r1(kg);
+// Últimas sesiones de un ejercicio (sin contar semanas de descarga)
+function exHistory(exId, n = 5) {
+  const out = [];
+  for (let i = state.workouts.length - 1; i >= 0 && out.length < n; i--) {
+    const w = state.workouts[i], x = w.ex.find(e => e.id === exId);
+    if (x) out.push({ d: w.d, sets: x.sets, deload: w.deload });
+  }
+  return out;
 }
 
 // ---------- Modo entrenamiento ----------
@@ -442,6 +467,7 @@ const restSecs = r => { const n = parseInt(r, 10); return isNaN(n) ? 0 : n; };
 // Series de la última vez que hiciste este ejercicio
 function lastSets(exId) {
   for (let i = state.workouts.length - 1; i >= 0; i--) {
+    if (state.workouts[i].deload) continue; // la descarga no cuenta para progresar
     const x = state.workouts[i].ex.find(e => e.id === exId);
     if (x) return x.sets;
   }
@@ -493,7 +519,10 @@ function startWorkout(dayIdx, quick) {
       sets: dd.exercises.map(x => {
         const last = lastSets(x.ex), sg = suggestion(x);
         const reps = parseInt(x.reps, 10) || '';
-        return Array.from({ length: x.series }, (_, k) => sg ? { kg: sg.kg, reps: sg.reps, done: false }
+        const dl = deloadOn() && !quick;
+        const n = dl ? deloadSeries(x) : x.series;
+        if (dl && sg && sg.kg) sg.kg = round25(Math.max(...lastSets(x.ex).map(z => Number(z.kg) || 0)) * 0.9);
+        return Array.from({ length: n }, (_, k) => sg ? { kg: sg.kg, reps: sg.reps, done: false }
           : { kg: last && last[k] ? last[k].kg : '', reps: last && last[k] ? last[k].reps : reps, done: false });
       }),
     };
@@ -532,7 +561,7 @@ function startWorkout(dayIdx, quick) {
         ${pair.length === 2 ? `<div class="wk-badge ss">Superserie ${x.ss} · ${pair[0][1] === ses.i ? `luego <b>${esc(exById(pair[1][0].ex).n)}</b>` : `alterna con <b>${esc(exById(pair[0][0].ex).n)}</b>`}</div>` : ''}
         <h2 style="margin:0 0 4px">${esc(e.n)}</h2>
         <div class="muted small">${x.series} × ${esc(x.reps)}${x.rest !== '-' ? ' · descanso ' + esc(x.rest) : ''}${last ? ` · la última vez: ${last.map(z => (z.kg ? z.kg + 'kg×' : '') + z.reps).join(', ')}` : ''}</div>
-        ${sg ? `<div class="hint-box">💡 ${esc(sg.msg)}</div>` : ''}
+        ${deloadOn() && !ses.day && !x.warm && !x.stretch ? '<div class="hint-box">🧘 Semana de descarga: menos series y ~90 % del peso. Termina cada serie con 3 o 4 repeticiones en reserva.</div>' : sg ? `<div class="hint-box">💡 ${esc(sg.msg)}</div>` : ''}
         <div class="wk-img">${e.img.map(im => `<img src="${EX_IMG_BASE + im}" alt="" onerror="this.style.display='none'">`).join('')}</div>
         ${resting ? `<div class="rest-box"><div class="muted small">Descanso</div><div class="rest-t" id="restT"></div>
           <div class="btn-row" style="justify-content:center"><button class="btn ghost sm" id="rPlus">+15 s</button><button class="btn sm" id="rSkip">Saltar</button></div></div>` : ''}
@@ -550,6 +579,7 @@ function startWorkout(dayIdx, quick) {
           <button class="btn ghost" id="wPrev" ${ses.i === 0 ? 'disabled' : ''}>‹ Anterior</button>
           ${ses.i < dd.exercises.length - 1 ? '<button class="btn" id="wNext">Siguiente ›</button>' : '<button class="btn burn" id="wFinish">🏁 Terminar</button>'}
         </div>
+        ${(() => { const h = exHistory(x.ex); return h.length ? `<details class="wk-info"><summary>📈 Historial (${h.length})</summary><div class="hist">${h.map(z => { const best = z.sets.filter(q => q.kg).reduce((a, q) => Math.max(a, e1rm(q)), 0); return `<div class="hist-row"><span class="muted small">${shortDate(z.d)}${z.deload ? ' · descarga' : ''}</span><span>${z.sets.map(q => (q.kg ? q.kg + '×' : '') + q.reps).join(' · ')}</span>${best ? `<b>${r0(best)} kg</b>` : '<b></b>'}</div>`; }).join('')}</div><p class="muted small" style="margin:4px 0 0">kg × repeticiones por serie · a la derecha, 1RM estimado</p></details>` : ''; })()}
         <details class="wk-info"><summary>Ver técnica</summary><ol>${e.ins.map(z => `<li>${esc(z)}</li>`).join('')}</ol>
           <a href="${ytUrl('cómo hacer ' + e.n + ' técnica')}" target="_blank" rel="noopener">▶ Video en YouTube</a></details>
         <button class="see" id="wQuit" style="color:var(--danger)">Descartar entrenamiento</button>`;
@@ -603,7 +633,7 @@ function finishWorkout(ses) {
     const prev = Math.max(0, ...state.workouts.flatMap(w => w.ex.filter(y => y.id === x.id).flatMap(y => y.sets.filter(z => z.kg).map(e1rm))));
     return best > 0 && prev > 0 && best > prev;
   }).map(x => exById(x.id).n);
-  if (ex.length) state.workouts.push({ id: uid(), d: todayKey(), name: dd.name, minutes, ex });
+  if (ex.length) state.workouts.push({ id: uid(), d: todayKey(), name: dd.name, minutes, ex, ...(deloadOn() && !ses.day ? { deload: true } : {}) });
   if (ses.day) {
     const met = (state.routine || state.profile).objetivo === 'perder' ? 6 : 5;
     day(todayKey()).exercises.push({ id: uid(), name: 'Entrenamiento: ' + dd.name, minutes, kcal: burnedKcal(met, minutes) });
