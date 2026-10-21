@@ -28,6 +28,26 @@ const DIETS = {
 };
 const EMPTY = () => ({ profile: null, days: {}, customFoods: [], routine: null, weights: [], measures: [], plan: null, ajuste: 0, lastAdjust: null, favFoods: [], workouts: [], customRecipes: [], badges: [] });
 
+// ---------- Tema (se guarda por dispositivo) ----------
+const THEME_KEY = 'fitplan-theme';
+const ACCENTS = { violeta: ['#6a1bf5', '#8f5bff', '#8a55ff', '#a77dff'], azul: ['#1d6ff2', '#4b8ef7', '#4d8ff7', '#79acff'], verde: ['#0f9d6c', '#2fbf8a', '#2fc28c', '#5ad8a8'], naranja: ['#e85d04', '#f48c2b', '#f7862c', '#ffa65c'], rosa: ['#d6246e', '#ec4f8f', '#ee5b97', '#ff86b5'] };
+function themePrefs() { try { return { mode: 'auto', accent: 'violeta', ...JSON.parse(localStorage.getItem(THEME_KEY)) }; } catch (e) { return { mode: 'auto', accent: 'violeta' }; } }
+function applyTheme() {
+  const t = themePrefs();
+  const root = document.documentElement;
+  if (t.mode === 'auto') delete root.dataset.theme; else root.dataset.theme = t.mode;
+  const dark = t.mode === 'dark' || (t.mode === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  const a = ACCENTS[t.accent] || ACCENTS.violeta;
+  root.style.setProperty('--accent', dark ? a[2] : a[0]);
+  root.style.setProperty('--accent-2', dark ? a[3] : a[1]);
+  root.style.setProperty('--accent-soft', `color-mix(in srgb, ${dark ? a[2] : a[0]} ${dark ? 22 : 12}%, ${dark ? '#17171d' : '#fff'})`);
+  root.style.setProperty('--lavender', `color-mix(in srgb, ${dark ? a[2] : a[0]} ${dark ? 35 : 22}%, ${dark ? '#17171d' : '#fff'})`);
+  const meta = document.querySelector('meta[name=theme-color]');
+  if (meta) meta.content = a[0];
+}
+applyTheme();
+if (window.matchMedia) window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
+
 let state = load();
 let view = state.profile ? 'hoy' : 'perfil';
 let currentDate = todayKey();
@@ -180,7 +200,7 @@ function checkBadges() {
   const fresh = BADGES.filter(b => !state.badges.includes(b.id) && b.test());
   if (!fresh.length) return;
   state.badges = [...state.badges, ...fresh.map(b => b.id)];
-  setTimeout(() => toast(`🏅 Logro desbloqueado: ${fresh[0].name}${fresh.length > 1 ? ` y ${fresh.length - 1} más` : ''}`), 2500);
+  setTimeout(() => { toast(`🏅 Logro desbloqueado: ${fresh[0].name}${fresh.length > 1 ? ` y ${fresh.length - 1} más` : ''}`); confetti(); }, 2500);
 }
 
 // ---------- Cálculos ----------
@@ -276,7 +296,34 @@ function go(v) {
   view = v;
   render();
   window.scrollTo(0, 0);
+  animateEnter();
 }
+// Las animaciones de entrada solo corren al cambiar de vista, no en cada redibujado
+function animateEnter() {
+  const m = $('#main');
+  m.classList.remove('enter'); void m.offsetWidth; m.classList.add('enter');
+  m.querySelectorAll('[data-count]').forEach(el => {
+    const end = Number(el.dataset.count), t0 = performance.now(), suffix = el.dataset.suffix || '';
+    const step = now => {
+      const k = Math.min(1, (now - t0) / 700), e = 1 - Math.pow(1 - k, 3);
+      el.textContent = Math.round(end * e) + suffix;
+      if (k < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  });
+  clearTimeout(animateEnter._t);
+  animateEnter._t = setTimeout(() => m.classList.remove('enter'), 900);
+}
+function confetti(n = 60) {
+  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const box = document.createElement('div');
+  box.className = 'confetti';
+  const cols = ['var(--accent)', 'var(--prot)', 'var(--carb)', 'var(--fat)', 'var(--burn)', '#f5b301'];
+  box.innerHTML = Array.from({ length: n }, () => `<i style="left:${Math.random() * 100}%;background:${cols[Math.floor(Math.random() * cols.length)]};animation-delay:${Math.random() * 0.4}s;animation-duration:${1.6 + Math.random() * 1.2}s;--x:${(Math.random() - 0.5) * 200}px;--r:${Math.random() * 720}deg"></i>`).join('');
+  document.body.appendChild(box);
+  setTimeout(() => box.remove(), 3400);
+}
+const tap = () => { if (navigator.vibrate) navigator.vibrate(12); };
 function render() {
   const views = { hoy: viewHoy, comidas: viewComidas, ejercicio: viewEjercicio, recetas: viewRecetas, rutinas: viewRutinas, progreso: viewProgreso, perfil: viewPerfil };
   if (!state.profile && view !== 'perfil') view = 'perfil';
@@ -337,13 +384,13 @@ function ring(value, max, color, size = 170, stroke = 14, track = 'var(--soft)')
   const pct = Math.min(1, max > 0 ? value / max : 0);
   return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
     <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="${track}" stroke-width="${stroke}"/>
-    <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="${color}" stroke-width="${stroke}"
-      stroke-linecap="round" stroke-dasharray="${c}" stroke-dashoffset="${c * (1 - pct)}"/>
+    <circle class="ring-fg" cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="${color}" stroke-width="${stroke}"
+      stroke-linecap="round" stroke-dasharray="${c}" stroke-dashoffset="${c * (1 - pct)}" style="--c:${c}"/>
   </svg>`;
 }
 function macroRing(label, val, goal, color) {
   return `<div class="mring">
-    <div class="ring">${ring(val, goal, color, 96, 10)}<div class="center"><span class="big">${r0(val)}</span></div></div>
+    <div class="ring">${ring(val, goal, color, 96, 10)}<div class="center"><span class="big" data-count="${r0(val)}">${r0(val)}</span></div></div>
     <div class="lbl"><i style="background:${color}"></i>${label}</div>
     <div class="of">de ${r0(goal)} g</div>
   </div>`;
@@ -354,6 +401,25 @@ function macroBar(label, val, goal, color) {
     <div class="row small"><span><b>${label}</b></span><span class="muted">${r0(val)} / ${r0(goal)} g</span></div>
     <div class="bar"><span style="width:${pct}%;background:${color}"></span></div>
   </div>`;
+}
+// Avisos según la hora: qué falta registrar hoy, con acción directa
+function nudges(d, tg) {
+  if (currentDate !== todayKey()) return [];
+  const h = new Date().getHours();
+  const has = m => d.foods.some(f => f.meal === m);
+  const out = [];
+  const dismissed = ui.dismissed || [];
+  if (h >= 10 && h < 16 && !has('desayuno')) out.push({ id: 'desayuno', ico: '🍳', txt: '¿Ya desayunaste? Regístralo para llevar bien la cuenta.', act: 'meal:desayuno', btn: 'Registrar' });
+  if (h >= 15 && !has('almuerzo')) out.push({ id: 'almuerzo', ico: '🍲', txt: 'Aún no registras el almuerzo.', act: 'meal:almuerzo', btn: 'Registrar' });
+  if (h >= 21 && !has('cena')) out.push({ id: 'cena', ico: '🥗', txt: 'Falta la cena de hoy.', act: 'meal:cena', btn: 'Registrar' });
+  const expected = Math.floor(tg.water * Math.min(1, Math.max(0, (h - 8) / 13)));
+  if (d.water < expected - 1) out.push({ id: 'agua', ico: '💧', txt: `Vas ${d.water} de ${tg.water} vasos de agua. ¡Toma uno ahora!`, act: 'water', btn: '+1 vaso' });
+  const r = state.routine;
+  if (r && h >= 16 && !d.exercises.length && r.days.some(x => !x.done)) {
+    const i = r.days.findIndex(x => !x.done);
+    out.push({ id: 'entreno', ico: '🏋️', txt: `Te toca: ${r.days[i].name}.`, act: 'train:' + i, btn: 'Entrenar' });
+  }
+  return out.filter(n => !dismissed.includes(n.id)).slice(0, 2);
 }
 function viewHoy() {
   const tg = calcTargets();
@@ -415,9 +481,10 @@ function viewHoy() {
       <button class="round-btn" data-go="perfil" aria-label="Perfil">⚙️</button>
     </div>
     ${dateBar()}
+    ${nudges(d, tg).map(n => `<div class="nudge"><span class="ni">${n.ico}</span><span class="nt">${esc(n.txt)}</span><button class="btn sm" data-nudge="${n.act}">${n.btn}</button><button class="icon-btn" data-dismiss="${n.id}" aria-label="Ocultar">✕</button></div>`).join('')}
     <div class="hero">
-      <div class="ring">${ring(t.kcal, budget, over ? 'var(--danger)' : '#a77dff', 150, 14, 'rgba(255,255,255,.12)')}
-        <div class="center"><span class="big">${budget > 0 ? Math.round(Math.min(999, t.kcal / budget * 100)) : 0}%</span><span class="muted small">consumido</span></div>
+      <div class="ring">${ring(t.kcal, budget, over ? 'var(--danger)' : 'var(--accent-2)', 150, 14, 'rgba(255,255,255,.12)')}
+        <div class="center"><span class="big" data-count="${budget > 0 ? Math.round(Math.min(999, t.kcal / budget * 100)) : 0}" data-suffix="%">${budget > 0 ? Math.round(Math.min(999, t.kcal / budget * 100)) : 0}%</span><span class="muted small">consumido</span></div>
       </div>
       <div class="hero-text">
         <div class="hero-title">${over ? `Te pasaste por ${r0(-left)} kcal` : `Te quedan ${r0(left)} kcal`}</div>
@@ -497,7 +564,14 @@ bind.hoy = () => {
   }));
   $$('[data-water]').forEach(b => b.addEventListener('click', () => {
     const d = day(); const n = Number(b.dataset.water);
-    d.water = d.water === n ? n - 1 : n; save(); render();
+    d.water = d.water === n ? n - 1 : n; tap(); save(); render();
+  }));
+  $$('[data-dismiss]').forEach(b => b.addEventListener('click', () => { ui.dismissed = [...(ui.dismissed || []), b.dataset.dismiss]; render(); }));
+  $$('[data-nudge]').forEach(b => b.addEventListener('click', () => {
+    const [kind, arg] = b.dataset.nudge.split(':');
+    if (kind === 'meal') { ui.meal = arg; go('comidas'); }
+    if (kind === 'water') { day().water++; tap(); save(); render(); toast('💧 ¡Bien!'); }
+    if (kind === 'train') { ui.rutTab = 'rutina'; go('rutinas'); startWorkout(Number(arg)); }
   }));
   bindLogRecipe(currentDate);
 };
@@ -657,7 +731,7 @@ bind.comidas = () => {
     const f = foodById(b.dataset.quick);
     const n = addFoodToDay(f, f.por || 100, ui.meal);
     toast(`+ ${f.name} (${r0(n.kcal)} kcal) en ${MEALS.find(m => m.id === ui.meal).name.toLowerCase()}`);
-    b.classList.add('pop'); setTimeout(() => b.classList.remove('pop'), 400);
+    b.classList.add('pop'); tap(); setTimeout(() => b.classList.remove('pop'), 400);
   }));
   const fav = $('#favBtn');
   if (fav) fav.addEventListener('click', () => {
@@ -1499,13 +1573,14 @@ function finishWorkout(ses) {
   save(); closeModal(); render();
   const vol = ex.reduce((a, x) => a + x.sets.reduce((b, z) => b + z.kg * z.reps, 0), 0);
   openModal(`<div style="text-align:center">
-    <div style="font-size:48px">🏆</div>
+    <div style="font-size:48px" class="trophy">🏆</div>
     <h2>¡Entrenamiento terminado!</h2>
     <div class="grid g3" style="gap:10px;margin:14px 0">
       ${tile('Tiempo', minutes, 'min', '⏱️')}${tile('Series', ex.reduce((a, x) => a + x.sets.length, 0), '', '✅')}${tile('Volumen', r0(vol), 'kg', '🏋️')}
     </div>
     ${prs.length ? `<p><b>🎉 Nuevo récord en:</b> ${esc(prs.join(', '))}</p>` : ''}
     <button class="btn" id="okW">Listo</button></div>`, m => m.querySelector('#okW').addEventListener('click', closeModal));
+  confetti(90);
 }
 
 // ---------- Vista: Progreso (peso, medidas, ajuste automático) ----------
@@ -1525,13 +1600,13 @@ function weightChart(ws) {
   const line = avg.map(a => `${x(a.d)},${y(a.kg)}`).join(' ');
   const area = `${x(avg[0].d)},${H - 30} ${line} ${x(avg[avg.length - 1].d)},${H - 30}`;
   return `<svg viewBox="0 0 ${W} ${H}" class="wchart" role="img" aria-label="Gráfico de peso">
-    <defs><linearGradient id="wg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8a55ff" stop-opacity=".55"/><stop offset="1" stop-color="#8a55ff" stop-opacity="0"/></linearGradient></defs>
+    <defs><linearGradient id="wg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--accent)" stop-opacity=".55"/><stop offset="1" stop-color="var(--accent)" stop-opacity="0"/></linearGradient></defs>
     ${ticks.map(t => `<line x1="${P}" x2="${W - 10}" y1="${y(t)}" y2="${y(t)}" stroke="rgba(255,255,255,.08)"/><text x="${P - 6}" y="${y(t) + 4}" text-anchor="end" class="axis">${r1(t)}</text>`).join('')}
     <polygon fill="url(#wg)" points="${area}"/>
-    <polyline fill="none" stroke="#a77dff" stroke-width="3" stroke-linejoin="round" stroke-linecap="round" points="${line}"/>
+    <polyline fill="none" stroke="var(--accent-2)" stroke-width="3" stroke-linejoin="round" stroke-linecap="round" points="${line}"/>
     ${ws.map(w => `<circle cx="${x(w.d)}" cy="${y(w.kg)}" r="3" fill="rgba(255,255,255,.55)"><title>${shortDate(w.d)}: ${w.kg} kg</title></circle>`).join('')}
     <line x1="${x(last.d)}" x2="${x(last.d)}" y1="10" y2="${H - 30}" stroke="rgba(255,255,255,.25)" stroke-dasharray="4 4"/>
-    <circle cx="${x(last.d)}" cy="${y(last.kg)}" r="7" fill="#fff" stroke="#8a55ff" stroke-width="4"/>
+    <circle cx="${x(last.d)}" cy="${y(last.kg)}" r="7" fill="#fff" stroke="var(--accent)" stroke-width="4"/>
     <text x="${P}" y="${H - 6}" class="axis">${shortDate(first)}</text><text x="${W - 10}" y="${H - 6}" text-anchor="end" class="axis">${shortDate(last.d)}</text>
   </svg><div class="muted small">Puntos = cada pesaje · Línea violeta = promedio de 7 días (más confiable que un día suelto).</div>`;
 }
@@ -1861,6 +1936,11 @@ function viewPerfil() {
             ${state.profile ? '<button class="btn ghost sm" id="resetBtn" style="color:var(--danger)">Borrar todo</button>' : ''}
           </div>
         </div>
+        <div class="card">
+          <h2>Apariencia</h2>
+          <div class="field"><label>Tema</label><div class="chips">${[['auto', '🌗 Automático'], ['light', '☀️ Claro'], ['dark', '🌙 Oscuro']].map(([k, l]) => `<button class="chip ${themePrefs().mode === k ? 'active' : ''}" data-theme-mode="${k}">${l}</button>`).join('')}</div></div>
+          <div class="field"><label>Color principal</label><div class="swatches">${Object.entries(ACCENTS).map(([k, c]) => `<button class="swatch ${themePrefs().accent === k ? 'on' : ''}" data-accent="${k}" style="background:${c[0]}" aria-label="${k}" title="${k}"></button>`).join('')}</div></div>
+        </div>
         <div class="card" id="syncCard"></div>
         <div class="card">
           <h2>Créditos</h2>
@@ -1884,6 +1964,9 @@ function syncCardHtml() {
 }
 let offSync = null;
 bind.perfil = () => {
+  const setTheme = patch => { try { localStorage.setItem(THEME_KEY, JSON.stringify({ ...themePrefs(), ...patch })); } catch (e) { /* ignorar */ } applyTheme(); render(); };
+  $$('[data-theme-mode]').forEach(b => b.addEventListener('click', () => setTheme({ mode: b.dataset.themeMode })));
+  $$('[data-accent]').forEach(b => b.addEventListener('click', () => setTheme({ accent: b.dataset.accent })));
   const card = $('#syncCard');
   const paint = () => {
     if (!card.isConnected) { if (offSync) offSync(); return; }
@@ -1939,8 +2022,33 @@ bind.perfil = () => {
   });
 };
 
+// ---------- Gestos: deslizar para cambiar de día ----------
+(function swipeDays() {
+  let x0 = null, y0 = 0, t0 = 0;
+  const main = $('#main');
+  main.addEventListener('touchstart', e => {
+    if (!['hoy', 'comidas', 'ejercicio'].includes(view) || $('.modal-back')) { x0 = null; return; }
+    if (e.target.closest('input, select, textarea, .scroll-x, .chips, .list.scroll, .act-grid')) { x0 = null; return; }
+    x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; t0 = Date.now();
+  }, { passive: true });
+  main.addEventListener('touchend', e => {
+    if (x0 === null) return;
+    const dx = e.changedTouches[0].clientX - x0, dy = e.changedTouches[0].clientY - y0;
+    x0 = null;
+    if (Math.abs(dx) < 70 || Math.abs(dx) < Math.abs(dy) * 2 || Date.now() - t0 > 600) return;
+    const next = shiftKey(currentDate, dx < 0 ? 1 : -1);
+    if (next > todayKey()) return toast('No puedes ir al futuro 😉');
+    currentDate = next;
+    render();
+    main.classList.remove('slide-l', 'slide-r'); void main.offsetWidth;
+    main.classList.add(dx < 0 ? 'slide-l' : 'slide-r');
+    setTimeout(() => main.classList.remove('slide-l', 'slide-r'), 400);
+  }, { passive: true });
+})();
+
 // ---------- Inicio ----------
 render();
+animateEnter();
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
   navigator.serviceWorker.register('sw.js').catch(() => {});
 }

@@ -46,6 +46,9 @@ Los datos se guardan en tu cuenta de Firebase y se actualizan en todos tus dispo
 - **Rutinas**: rutina semanal según objetivo, nivel, días, minutos y lugar (casa sin equipo, casa con mancuernas o bandas, gimnasio). Biblioteca de 650 ejercicios con imágenes, músculos, técnica, consejos y video. Puedes cambiar cualquier ejercicio por otro parecido. Modo entrenamiento con registro de series, peso y temporizador de descanso.
 - **Progreso**: registro de peso con gráfico y promedio de 7 días, ritmo semanal, ajuste automático de la meta de calorías, medidas corporales, % de grasa estimado e historial de fuerza (1RM estimado y récords). Resumen de 7 y 30 días con gráfico de macros, rachas, 15 logros y fotos de progreso con comparación de antes y después (las fotos quedan solo en el dispositivo).
 
+- **Diseño**: tema claro, oscuro o automático y 5 colores a elección (Perfil → Apariencia), animaciones, confeti en logros y entrenamientos, y deslizar el dedo en Hoy, Comidas o Ejercicio para cambiar de día.
+- **Recordatorios**: avisos en Hoy según la hora (comidas sin registrar, agua, entrenamiento pendiente) con botón de acción directa.
+
 ## Archivos
 
 - `index.html`, `styles.css`, `app.js`: la app.
