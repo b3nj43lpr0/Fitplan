@@ -59,7 +59,7 @@ Los datos se guardan en tu cuenta de Firebase y se actualizan en todos tus dispo
 
 ## Coach con IA (gratis)
 
-Toca 💬 en Hoy (o Progreso → Resumen) para preguntarle cosas como "¿qué hice bien esta semana?" o "¿qué ceno con lo que me queda?". Usa Gemini mediante Firebase AI Logic en su nivel gratuito (plan Spark, sin tarjeta) y en cada pregunta le pasa un resumen de tus números (metas, últimos 7 días, peso, entrenamientos y desafíos), sin tu nombre ni tu correo. En el nivel gratuito Google puede usar esas conversaciones para mejorar sus modelos.
+Toca 💬 en Hoy (o Progreso → Resumen) para preguntarle cosas como "¿qué hice bien esta semana?" o "¿qué ceno con lo que me queda?". Usa Gemini (gemini-3.8-flash) mediante Firebase AI Logic en su nivel gratuito (plan Spark, sin tarjeta) y en cada pregunta le pasa un resumen de tus números (metas, últimos 7 días, peso, entrenamientos y desafíos), sin tu nombre ni tu correo. En el nivel gratuito Google puede usar esas conversaciones para mejorar sus modelos.
 
 Para activarlo: Firebase → Compilación → **AI Logic** → Comenzar → elige **Gemini Developer API** (la opción sin costo) → Activar. Luego inicia sesión con Google en Perfil → Sincronización: el coach con IA solo funciona con sesión iniciada. Sin conexión, sin sesión o si se acaba la cuota gratis, responde un coach básico que analiza tus números sin IA.
 

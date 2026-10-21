@@ -273,7 +273,8 @@
 
   // ---------- Coach con IA (Gemini mediante Firebase AI Logic, nivel gratuito) ----------
   // Se prueban modelos en orden por si alguno deja de estar disponible en el nivel gratis
-  const AI_MODELS = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-flash-latest'];
+  // Modelos gratuitos de Firebase AI Logic (octubre de 2026); si Google retira uno, se usa el siguiente
+  const AI_MODELS = ['gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-2.5-flash'];
   let aiMod = null;
   async function ask({ history = [], message, system, onChunk }) {
     if (!fb || !fb.app) { const e = new Error('offline'); e.code = 'offline'; throw e; }
