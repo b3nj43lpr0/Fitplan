@@ -146,7 +146,8 @@ function exerciseSystem() {
     .map(exById).filter(Boolean).map(e => `${e.id}: ${e.n}`).join('\n');
   return `Conviertes lo que la persona cuenta de su entrenamiento en datos. Responde SOLO con JSON:
 {"strength":[{"id":"id de la lista o null","name":"nombre en español","sets":[{"kg":60,"reps":10}]}],"cardio":[{"act":"id de actividad","minutes":20,"km":null}],"minutes":null,"note":""}
-- strength: ejercicios con series. "3x10 con 60" = 3 series de 10 repeticiones con 60 kg. Sin peso (dominadas, flexiones) usa kg 0. Si dicen distintos pesos por serie, una entrada por serie.
+- strength: TODOS los ejercicios de fuerza que nombren, aunque no digan series ni peso. "3x10 con 60" = 3 series de 10 repeticiones con 60 kg. Sin peso (dominadas, flexiones) usa kg 0. Si dicen distintos pesos por serie, una entrada por serie. Si no dicen series ni repeticiones, usa "sets": [] (no inventes números).
+- Si una frase junta dos ejercicios ("press militar en máquina con elevación de mancuernas"), sepáralos en dos.
 - id: elige el ejercicio de la BIBLIOTECA que corresponda (prefiere los de "SUS EJERCICIOS" si calzan). "Sentadilla con barra" = squat, "press banca" = bench-press, "peso muerto" = deadlift, etc. Si ninguno calza, null y escribe el nombre más común en español.
 - cardio y otras actividades con tiempo: act es uno de estos ids: ${ACTIVITIES.map(a => `${a.id} (${a.name})`).join(', ')}.
 - minutes: duración total de las pesas si la dicen; si no, null.
@@ -179,7 +180,7 @@ function openAIExercise() {
           const sets = (Array.isArray(x.sets) ? x.sets : []).map(z => ({ kg: r1(num(z.kg, 1000)), reps: Math.round(num(z.reps, 500)) })).filter(z => z.reps);
           const name = String(x.name || (e && e.n) || 'Ejercicio').slice(0, 60);
           return { e, name: e ? e.n : name, said: name, sets };
-        }).filter(x => x.sets.length);
+        });
         const cardio = (Array.isArray(r.cardio) ? r.cardio : []).map(x => ({ a: ACTIVITIES.find(a => a.id === x.act), minutes: Math.round(num(x.minutes, 600)), km: num(x.km, 300) })).filter(x => x.a && x.minutes);
         if (!strength.length && !cardio.length) { q('#aeOut').innerHTML = '<div class="hint-box">No entendí ejercicios. Prueba con el nombre, las series y el peso, o los minutos.</div>'; return; }
         aiExerciseReview(q('#aeOut'), strength, cardio, num(r.minutes, 600), r.note);
@@ -190,6 +191,7 @@ function openAIExercise() {
 }
 function aiExerciseReview(box, strength, cardio, minutes, note) {
   const nSets = strength.reduce((a, x) => a + x.sets.length, 0);
+  const missing = strength.some(x => !x.sets.length);
   let mins = Math.round(minutes || nSets * 2.5);
   const prevOf = x => (x.e ? bestE1rm(x.e.id) : 0);
   const paint = () => {
@@ -201,14 +203,16 @@ function aiExerciseReview(box, strength, cardio, minutes, note) {
         const opts = [...new Map([x.e, ...exerciseCandidates(x.said), ...exerciseCandidates(x.name)].filter(Boolean).map(e => [e.id, e])).values()];
         return `<div class="item"><div class="info">
           <select class="ex-pick" data-ae-ex="${i}" aria-label="Ejercicio">${opts.map(e => `<option value="${e.id}" ${x.e && x.e.id === e.id ? 'selected' : ''}>${esc(e.n)}</option>`).join('')}<option value="" ${x.e ? '' : 'selected'}>➕ Nuevo: ${esc(x.said)}</option></select>
-          <div class="muted small">${x.sets.map(z => (z.kg ? z.kg + ' kg × ' : '') + z.reps).join(' · ')}${top && prev && top > prev ? ' <span class="pr-tag">🏆 Récord</span>' : ''}</div></div></div>`;
+          <div class="muted small">${x.sets.length ? x.sets.map(z => (z.kg ? z.kg + ' kg × ' : '') + z.reps).join(' · ') : '<span class="warn-txt">Sin series: las completas en el siguiente paso</span>'}${top && prev && top > prev ? ' <span class="pr-tag">🏆 Récord</span>' : ''}</div></div></div>`;
       }).join('')}</div>
-      <div class="field"><label for="aeMin">Duración de las pesas (min)</label><input id="aeMin" type="number" min="1" inputmode="numeric" value="${mins}"></div>` : ''}
+      ${missing ? '' : `<div class="field"><label for="aeMin">Duración de las pesas (min)</label><input id="aeMin" type="number" min="1" inputmode="numeric" value="${mins}"></div>`}` : ''}
       ${cardio.length ? `<h3>🏃 Cardio y actividad</h3><div class="list">${cardio.map(x => `<div class="item"><span class="fi sm">${ACT_ICO[x.a.id] || '🏅'}</span><div class="info"><div class="name">${esc(x.a.name)}</div><div class="muted small">${x.minutes} min${x.km ? ' · ' + x.km.toLocaleString('es') + ' km' : ''}</div></div><span class="kcal" style="color:var(--burn)">−${r0(burnedKcal(x.a.met, x.minutes))}</span></div>`).join('')}</div>` : ''}
-      <div class="result-box">🔥 <b>${r0(kcalW + kcalC)} kcal</b> quemadas${nSets ? ` · ${nSets} series` : ''}</div>
+      ${missing ? '' : `<div class="result-box">🔥 <b>${r0(kcalW + kcalC)} kcal</b> quemadas${nSets ? ` · ${nSets} series` : ''}</div>`}
       ${note ? `<p class="muted small">💡 ${esc(note)}</p>` : ''}
       ${strength.length ? '<p class="muted small">Si algún ejercicio no es el correcto, cámbialo en la lista. Los "Nuevo" se crean en tu biblioteca.</p>' : ''}
-      <button class="btn burn" id="aeSave" style="width:100%">Guardar en ${currentDate === todayKey() ? 'hoy' : shortDate(currentDate)}</button></div>`;
+      ${missing ? `<button class="btn burn" id="aeEdit" style="width:100%">Completar series (kg y reps) →</button>`
+        : `<button class="btn burn" id="aeSave" style="width:100%">Guardar en ${currentDate === todayKey() ? 'hoy' : shortDate(currentDate)}</button>
+          ${strength.length ? '<button class="see" id="aeEdit" style="margin-top:8px">✏️ Ajustar series antes de guardar</button>' : ''}`}</div>`;
     box.querySelectorAll('[data-ae-ex]').forEach(sel => sel.addEventListener('change', () => {
       const x = strength[sel.dataset.aeEx];
       x.e = sel.value ? exById(sel.value) : null;
@@ -217,25 +221,47 @@ function aiExerciseReview(box, strength, cardio, minutes, note) {
     }));
     const mi = box.querySelector('#aeMin');
     if (mi) mi.addEventListener('change', () => { mins = Math.max(1, Math.round(num(mi.value, 600)) || mins); setTimeout(paint); });
-    box.querySelector('#aeSave').addEventListener('click', save2);
+    const sv = box.querySelector('#aeSave');
+    if (sv) sv.addEventListener('click', save2);
+    box.querySelector('#aeEdit')?.addEventListener('click', toEditor);
+  };
+  // Ejercicio de la biblioteca (o uno nuevo con el nombre que dijiste)
+  const ensure = x => {
+    if (x.e) return x.e;
+    let e = state.customExercises.find(c => norm(c.n) === norm(x.said));
+    if (!e) {
+      e = { id: 'u_' + uid(), n: x.said, d: '', cat: 'fuerza', g: '', custom: true, eq: 'gimnasio', bw: false, home: false, lv: 'principiante', m: [], m2: [], img: [], ins: [], tips: [] };
+      state.customExercises.push(e);
+    }
+    return e;
+  };
+  const saveCardio = () => {
+    const d = day();
+    for (const x of cardio) d.exercises.push({ id: uid(), name: x.a.name + (x.km ? ` · ${x.km.toLocaleString('es')} km` : ''), minutes: x.minutes, kcal: burnedKcal(x.a.met, x.minutes), km: x.km || undefined });
+  };
+  // Pasa las pesas al registro del gym para anotar kg y reps (el cardio se guarda altiro)
+  const toEditor = () => {
+    saveCardio();
+    const g = gymDraft();
+    const draft = g && !g.wid && g.date === currentDate ? g : { date: currentDate, items: [], minutes: null, inten: 'normal' };
+    for (const x of strength) {
+      const e = ensure(x), last = lastSets(e.id);
+      const sets = x.sets.length ? x.sets.map(z => ({ ...z })) : last ? last.map(z => ({ kg: z.kg, reps: z.reps })) : [{ kg: '', reps: '' }, { kg: '', reps: '' }, { kg: '', reps: '' }];
+      const have = draft.items.find(y => y.id === e.id);
+      have ? have.sets.push(...(x.sets.length ? sets : [])) : draft.items.push({ id: e.id, sets });
+    }
+    if (minutes) draft.minutes = Math.round(minutes);
+    storeGymDraft(draft); save(); closeModal(); render();
+    if (cardio.length) toast('Cardio guardado. Ahora completa las series 💪');
+    openGymLog();
   };
   const save2 = () => {
-    const ex = strength.map(x => {
-      let e = x.e;
-      if (!e) {
-        e = state.customExercises.find(c => norm(c.n) === norm(x.said));
-        if (e) return { id: e.id, sets: x.sets };
-        e = { id: 'u_' + uid(), n: x.said, d: '', cat: 'fuerza', g: '', custom: true, eq: 'gimnasio', bw: false, home: false, lv: 'principiante', m: [], m2: [], img: [], ins: [], tips: [] };
-        state.customExercises.push(e);
-      }
-      return { id: e.id, sets: x.sets };
-    });
+    const ex = strength.map(x => ({ id: ensure(x).id, sets: x.sets }));
     // Si un ejercicio aparece dos veces, se juntan sus series
     const merged = [];
     for (const x of ex) { const y = merged.find(z => z.id === x.id); y ? y.sets.push(...x.sets) : merged.push({ ...x, sets: [...x.sets] }); }
     const prs = merged.length ? logStrength(merged, mins, burnedKcal(gymMet(merged), mins), { name: 'Pesas' }) : [];
-    const d = day();
-    for (const x of cardio) d.exercises.push({ id: uid(), name: x.a.name + (x.km ? ` · ${x.km.toLocaleString('es')} km` : ''), minutes: x.minutes, kcal: burnedKcal(x.a.met, x.minutes), km: x.km || undefined });
+    saveCardio();
     save(); closeModal(); render(); tap();
     if (prs.length) { confetti(60); toast(`🏆 ¡Nuevo récord en ${prs.join(', ')}!`); } else toast('Entrenamiento guardado 💪');
   };
