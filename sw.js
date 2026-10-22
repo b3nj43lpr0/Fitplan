@@ -1,9 +1,9 @@
 // Service worker: permite usar la app sin conexión una vez instalada
-const CACHE = 'fitplan-v24';
+const CACHE = 'fitplan-v25';
 // Imágenes de ejercicios, librería de Firebase y fuentes: no cambian, así que viven en su propia caché
 // y sobreviven a las actualizaciones de la app
 const STATIC = 'fitplan-static-v1';
-const FILES = ['./', './index.html', './styles.css', './js/core.js', './js/hoy.js', './js/comidas.js', './js/etiqueta.js', './js/actividad.js', './js/recetas.js', './js/entrenar.js', './js/progreso.js', './js/perfil.js', './js/coach.js', './js/main.js', './sync.js', './firebase-config.js', './data.js', './foods.js', './exercises.js', './vendor/zxing.min.js', './manifest.json', './icon.svg'];
+const FILES = ['./', './index.html', './styles.css', './js/core.js', './js/hoy.js', './js/comidas.js', './js/etiqueta.js', './js/actividad.js', './js/recetas.js', './js/entrenar.js', './js/progreso.js', './js/perfil.js', './js/coach.js', './js/ia.js', './js/main.js', './sync.js', './firebase-config.js', './data.js', './foods.js', './exercises.js', './vendor/zxing.min.js', './manifest.json', './icon.svg'];
 const IMMUTABLE = ['https://raw.githubusercontent.com/RepDB/', 'https://www.gstatic.com/firebasejs/', 'https://fonts.gstatic.com/'];
 
 self.addEventListener('install', e => {

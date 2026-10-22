@@ -63,6 +63,15 @@ Toca 💬 en Hoy (o Progreso → Resumen) para preguntarle cosas como "¿qué hi
 
 Para activarlo: Firebase → Compilación → **AI Logic** → Comenzar → elige **Gemini Developer API** (la opción sin costo) → Activar. Si App Check está aplicado para AI Logic, desactívalo en Seguridad → App Check → APIs → Firebase AI Logic → Dejar de aplicar (la app no usa App Check; el coach exige sesión iniciada). Luego inicia sesión con Google en Perfil → Sincronización: el coach con IA solo funciona con sesión iniciada. Sin conexión, sin sesión o si se acaba la cuota gratis, responde un coach básico que analiza tus números sin IA.
 
+### Más funciones con la misma IA
+
+- **Foto del plato** (Comidas → 📸): la IA reconoce los alimentos y estima cantidades y calorías.
+- **Escribe o dicta lo que comiste** (Comidas → 💬): "2 huevos revueltos y una marraqueta con palta" se separa en alimentos. Si un alimento coincide con uno de la base, se usan los valores de la base. Antes de guardar puedes cambiar los gramos, quitar alimentos y elegir la comida.
+- **Escribe o dicta lo que entrenaste** (Entrenar → Actividad → 💬): "press banca 3x10 con 60 kg y 20 min de trote" queda registrado como entrenamiento con series (cuenta para tus récords) y como actividad con calorías. Si un ejercicio no calza, lo cambias en la lista o se crea como nuevo.
+- **Armar una comida** (Recetas → 🤖 Con IA): propone un plato con las calorías y proteína que te quedan, con lo que tengas en la casa. Lo agregas al día o lo guardas como combo.
+- **Revisión semanal**: el resumen del lunes trae el análisis del coach (qué hiciste bien, qué falló y una meta). Se pide una sola vez por semana y queda también en el chat del coach.
+- **Récords**: aviso en vivo cuando una serie supera tu mejor marca; en Progreso → Fuerza ves los récords del mes y, por ejercicio, 1RM, peso máximo, más repeticiones y mejor volumen con su gráfico.
+
 ## Varias personas en el mismo teléfono
 
 Toca tu inicial en Hoy (o Perfil → Personas en este teléfono) para agregar a alguien o cambiar de persona. Cada una tiene sus propias comidas, rutina, progreso, entrenamiento en curso y fotos. Con la sincronización, cada perfil se guarda en su propio espacio dentro de la misma cuenta de Google.
@@ -80,7 +89,7 @@ Cada cambio corre `npm test` en GitHub (pruebas de la app en un navegador con ta
 ## Archivos
 
 - `index.html`, `styles.css`: la página y el diseño.
-- `js/`: el código, un archivo por parte (`core.js` con estado, cálculos y navegación; `hoy.js`, `comidas.js`, `actividad.js`, `recetas.js`, `entrenar.js`, `progreso.js`, `perfil.js`; `main.js` arranca la app).
+- `js/`: el código, un archivo por parte (`core.js` con estado, cálculos y navegación; `hoy.js`, `comidas.js`, `actividad.js`, `recetas.js`, `entrenar.js`, `progreso.js`, `perfil.js`, `coach.js` e `ia.js` con las funciones de IA; `main.js` arranca la app).
 - `sync.js`, `firebase-config.js`, `firestore.rules`: sincronización con Firebase.
 - `tests/`: pruebas automáticas.
 - `foods.js`: alimentos (USDA SR Legacy, dominio público).

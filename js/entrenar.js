@@ -474,6 +474,15 @@ function lastSets(exId) {
   return null;
 }
 const e1rm = s => s.kg * (1 + s.reps / 30); // fórmula de Epley
+// Mejor 1RM estimado que tienes guardado en un ejercicio
+function bestE1rm(exId) { return Math.max(0, ...state.workouts.flatMap(w => w.ex.filter(y => y.id === exId).flatMap(y => y.sets.filter(z => z.kg).map(e1rm)))); }
+// Ejercicios de una sesión que superan tu récord anterior (solo cuenta si ya tenías una marca)
+function newPRs(ex) {
+  return ex.filter(x => {
+    const best = Math.max(0, ...x.sets.filter(z => z.kg).map(e1rm)), prev = bestE1rm(x.id);
+    return best > 0 && prev > 0 && best > prev;
+  }).map(x => exById(x.id).n);
+}
 // Progresión doble: si la última vez completaste todas las series en el tope del rango, sube el peso;
 // si no, mismo peso y una repetición más
 function repRange(r) {
@@ -595,6 +604,13 @@ function startWorkout(dayIdx, quick) {
           const nx = sets[Number(b.dataset.set) + 1];
           if (nx && nx.kg === '' && z.kg !== '') nx.kg = z.kg;
           if (navigator.vibrate) navigator.vibrate(40);
+          // Récord en vivo: avisa en la primera serie que supera tu mejor marca
+          const cur = { kg: Number(z.kg) || 0, reps: Number(z.reps) || 0 }, prev = bestE1rm(x.ex);
+          if (cur.kg && cur.reps && prev > 0 && e1rm(cur) > prev && !(ses.prs || []).includes(x.ex)) {
+            ses.prs = [...(ses.prs || []), x.ex]; keep();
+            toast(`🏆 ¡Nuevo récord en ${e.n}! 1RM ≈ ${r0(e1rm(cur))} kg (antes ${r0(prev)})`);
+            confetti(40);
+          }
           // Superserie: tras el primero se pasa al segundo sin descanso; tras el segundo, descanso y vuelta al primero
           if (pair.length === 2) {
             const [a, bIdx] = [pair[0][1], pair[1][1]];
@@ -628,11 +644,7 @@ function finishWorkout(ses) {
   if (!ex.length && !confirm('No marcaste ninguna serie. ¿Terminar igual?')) return;
   const minutes = Math.max(1, Math.round((Date.now() - ses.start) / 60000));
   // Récords: comparamos con todo el historial anterior
-  const prs = ex.filter(x => {
-    const best = Math.max(0, ...x.sets.filter(z => z.kg).map(e1rm));
-    const prev = Math.max(0, ...state.workouts.flatMap(w => w.ex.filter(y => y.id === x.id).flatMap(y => y.sets.filter(z => z.kg).map(e1rm))));
-    return best > 0 && prev > 0 && best > prev;
-  }).map(x => exById(x.id).n);
+  const prs = newPRs(ex);
   if (ex.length) state.workouts.push({ id: uid(), d: todayKey(), name: dd.name, minutes, ex, ...(deloadOn() && !ses.day ? { deload: true } : {}) });
   if (ses.day) {
     const met = (state.routine || state.profile).objetivo === 'perder' ? 6 : 5;

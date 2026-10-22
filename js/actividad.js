@@ -89,6 +89,7 @@ function viewEjercicio() {
   const t = totals(d);
   return `
     ${dateBar()}
+    <button class="ai-btn wide" id="aiEx"><span>💬</span><b>Cuéntame qué entrenaste</b><small>"press banca 3x10 con 60 kg y 20 min de trote" · la IA lo registra</small></button>
     ${cardioCard()}
     <div class="grid g2">
       <div class="card">
@@ -123,6 +124,7 @@ function viewEjercicio() {
 bind.ejercicio = () => {
   bindDateBar();
   bindCardio();
+  $('#aiEx').addEventListener('click', openAIExercise);
   const upd = () => {
     const a = ACTIVITIES.find(x => x.id === $('#act').value);
     const m = Number($('#mins').value) || 0;

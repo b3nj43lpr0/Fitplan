@@ -515,3 +515,156 @@ test('Coach: chat con IA (simulada), contexto sin datos personales y coach bási
   const basic = await page.evaluate(() => basicCoach('semana'));
   expect(basic.some(x => x.startsWith('✅')) || basic.some(x => x.startsWith('💡'))).toBe(true);
 });
+
+// IA simulada para las funciones nuevas: responde según lo que se le pide
+async function fakeAI(page) {
+  await page.evaluate(() => {
+    Object.assign(window.FitSync.state, { enabled: true, user: { name: 'x' } });
+    window.__asked = [];
+    window.FitSync.ask = async o => {
+      window.__asked.push(o);
+      const m = o.message;
+      if (o.json && /Esto comí|foto/.test(m)) return '```json\n' + JSON.stringify({ items: [{ name: 'Marraqueta casera', grams: 100, kcal: 270, p: 8, c: 56, g: 1 }, { name: 'Palta', grams: 50, kcal: 999, p: 1, c: 4, g: 7 }, { name: 'Agua', grams: 200, kcal: 0 }], meal: 'desayuno', note: 'Porción estimada' }) + '\n```';
+      if (o.json && /Mi entrenamiento/.test(m)) return JSON.stringify({ strength: [{ id: null, name: 'Press de banca con barra', sets: [{ kg: 70, reps: 10 }, { kg: 70, reps: 8 }] }, { id: null, name: 'Remo en máquina Hammer', sets: [{ kg: 40, reps: 12 }] }], cardio: [{ act: 'trotar', minutes: 20, km: 3 }, { act: 'inventado', minutes: 5 }], minutes: 40, note: '' });
+      if (o.json && /Arma /.test(m)) return JSON.stringify({ name: 'Bowl de pollo y arroz', minutes: 20, items: [{ name: 'Pechuga de pollo', grams: 150, kcal: 248, p: 46, c: 0, g: 5 }, { name: 'Arroz', grams: 120, kcal: 156, p: 3, c: 34, g: 0 }], steps: ['Cocina el arroz.', 'Dora el pollo.'], tip: 'Agrega verduras.' });
+      const txt = '**✅ Lo que hiciste bien**\n- Registraste 6 días.\n**🎯 Meta para esta semana**\n- 140 g de proteína diaria.';
+      if (o.onChunk) o.onChunk(txt);
+      return txt;
+    };
+  });
+}
+
+test('IA: registrar comida escribiendo o con foto, con revisión antes de guardar', async ({ page }) => {
+  // Sin sesión: pide iniciar sesión en vez de fallar
+  await page.click('[data-view=comidas]');
+  await page.click('#aiText');
+  await expect(page.locator('.modal')).toContainText('inicia sesión con Google');
+  await page.click('[data-go-login]');
+  await expect(page.locator('#main')).toContainText('Sincronización');
+  await fakeAI(page);
+  await page.click('[data-view=comidas]');
+  const n0 = (await today(page)).foods.length;
+  await page.click('#aiText');
+  await page.fill('#afText', 'una marraqueta con palta');
+  await page.click('#afGo');
+  // La palta se reconoce en la base y usa sus valores reales (no los 999 kcal de la IA); el agua sin calorías se descarta
+  await expect(page.locator('.ai-item')).toHaveCount(2);
+  await expect(page.locator('.ai-item').nth(1)).toContainText('de la base');
+  await expect(page.locator('[data-ai-meal=desayuno]')).toHaveClass(/on/);
+  // Cambiar gramos escala las calorías; desmarcar quita el alimento
+  await page.fill('[data-ai-g="0"]', '50');
+  await page.dispatchEvent('[data-ai-g="0"]', 'change');
+  await expect(page.locator('.ai-item').first().locator('.kcal')).toHaveText('135');
+  await page.click('[data-ai-meal=snack]');
+  await page.click('#aiSave');
+  const fs = (await today(page)).foods.slice(n0);
+  expect(fs).toHaveLength(2);
+  expect(fs[0]).toMatchObject({ name: 'Marraqueta casera', grams: 50, kcal: 135, meal: 'snack', ai: true });
+  expect(fs[1].foodId).toBe('palta');
+  expect(fs[1].kcal).toBeLessThan(200);
+  expect(await page.evaluate(() => window.__asked[0].json)).toBe(true);
+  // Foto: la imagen viaja a la IA en base64
+  await page.click('#aiPhoto');
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+  await page.setInputFiles('#afPhoto', { name: 'plato.png', mimeType: 'image/png', buffer: png });
+  await expect(page.locator('.ai-item')).toHaveCount(2);
+  const img = await page.evaluate(() => window.__asked.at(-1).image);
+  expect(img.mimeType).toBe('image/jpeg');
+  expect(img.data.length).toBeGreaterThan(50);
+  // Si la IA falla, se muestra el motivo
+  await page.evaluate(() => { window.FitSync.ask = async () => { throw new Error('[429] quota exceeded'); }; });
+  await page.click('#afGo');
+  await expect(page.locator('#afOut')).toContainText('cuota gratis');
+});
+
+test('IA: registrar ejercicio escribiendo, con récord y ejercicio nuevo', async ({ page }) => {
+  await fakeAI(page);
+  await page.click('[data-view=rutinas]');
+  await page.click('[data-tab-rut=actividad]');
+  const w0 = (await state(page)).workouts.length;
+  await page.click('#aiEx');
+  await page.fill('#aeText', 'press banca 70x10 y 70x8, remo hammer 40x12 y 20 min trote 3 km');
+  await page.click('#aeGo');
+  await expect(page.locator('.ai-result')).toContainText('Press de Banca con Barra');
+  await expect(page.locator('.ai-result .pr-tag')).toHaveCount(1); // 70 × 10 supera su mejor marca
+  await expect(page.locator('[data-ae-ex="1"]')).toHaveValue(''); // "Nuevo: Remo en máquina Hammer"
+  // La IA del sistema recibe la biblioteca para elegir bien el ejercicio
+  expect(await page.evaluate(() => window.__asked.at(-1).system)).toContain('squat: Sentadilla Trasera con Barra');
+  await expect(page.locator('.ai-result')).toContainText('Trotar');
+  await expect(page.locator('.ai-result')).not.toContainText('inventado');
+  // Para corregir, la lista ofrece ejercicios parecidos de la biblioteca
+  expect(await page.evaluate(() => exerciseCandidates('Sentadilla con barra').map(e => e.id))).toContain('squat');
+  await page.click('#aeSave');
+  await expect(page.locator('#toast')).toContainText('Nuevo récord en Press de Banca con Barra');
+  const s = await state(page);
+  expect(s.workouts).toHaveLength(w0 + 1);
+  const w = s.workouts.at(-1);
+  expect(w.minutes).toBe(40);
+  expect(w.ex[0]).toEqual({ id: 'bench-press', sets: [{ kg: 70, reps: 10 }, { kg: 70, reps: 8 }] });
+  expect(s.customExercises.map(e => e.n)).toEqual(['Remo en máquina Hammer']);
+  const ex = (await today(page)).exercises;
+  expect(ex.some(e => e.name.startsWith('Pesas: Press de Banca') && e.minutes === 40)).toBe(true);
+  expect(ex.some(e => e.name.startsWith('Trotar') && e.minutes === 20 && e.km === 3)).toBe(true);
+  // El récord aparece en Progreso → Fuerza
+  await page.click('[data-view=progreso]');
+  await page.click('[data-tab-prog=fuerza]');
+  await expect(page.locator('.pr-box')).toContainText('Press de Banca con Barra');
+  await page.click('[data-strength=bench-press]');
+  await expect(page.locator('.modal')).toContainText('Peso máximo');
+  await expect(page.locator('.modal')).toContainText('70 kg × 10');
+  await page.click('[data-metric=vol]');
+  await expect(page.locator('#mLbl')).toContainText('Volumen');
+});
+
+test('IA: armar una comida con lo que queda y revisión semanal del coach', async ({ page }) => {
+  await fakeAI(page);
+  await page.click('[data-view=recetas]');
+  await page.click('#aiMeal');
+  await page.fill('#amHave', 'pollo y arroz');
+  await page.click('[data-am-pref=proteina]');
+  await page.click('[data-am-meal=cena]');
+  await page.click('#amGo');
+  await expect(page.locator('.ai-result')).toContainText('Bowl de pollo y arroz');
+  const q = await page.evaluate(() => window.__asked.at(-1).message);
+  expect(q).toContain('una cena');
+  expect(q).toContain('pollo y arroz');
+  expect(q).toContain('Alta en proteína');
+  await page.click('#amCombo');
+  expect((await state(page)).combos.at(-1)).toMatchObject({ name: 'Bowl de pollo y arroz', meal: 'cena' });
+  // Otra idea: le pide que no repita la anterior
+  await page.click('#amAgain');
+  await expect(page.locator('.ai-result')).toBeVisible();
+  expect(await page.evaluate(() => window.__asked.at(-1).message)).toContain('No repitas estas ideas: Bowl de pollo y arroz');
+  const n0 = (await today(page)).foods.length;
+  await page.click('#amAdd');
+  const fs = (await today(page)).foods.slice(n0);
+  expect(fs.map(f => f.meal)).toEqual(['cena', 'cena']);
+  // Revisión semanal: el resumen del lunes trae el análisis del coach y queda guardado
+  await page.click('[data-view=progreso]');
+  await page.click('[data-tab-prog=resumen]');
+  await page.click('#lastWeek');
+  await expect(page.locator('#wkAI')).toContainText('Lo que hiciste bien');
+  const asks = await page.evaluate(() => window.__asked.length);
+  await page.click('#wkOk');
+  await page.click('#lastWeek');
+  await expect(page.locator('#wkAI')).toContainText('140 g de proteína');
+  expect(await page.evaluate(() => window.__asked.length)).toBe(asks); // la segunda vez no se vuelve a preguntar
+  expect(await page.evaluate(() => coachLog().at(-1).text)).toContain('Meta para esta semana');
+});
+
+test('Récords: aviso en vivo al superar tu marca durante el entrenamiento', async ({ page }) => {
+  await page.click('[data-view=rutinas]');
+  // Mejor marca del fixture en press de banca: 60 kg × 10 → 1RM ≈ 80 kg
+  expect(Math.round(await page.evaluate(() => loadExercises().then(() => bestE1rm('bench-press'))))).toBe(80);
+  await page.evaluate(() => startWorkout(0, { name: 'Pecho', exercises: [{ ex: 'bench-press', series: 3, reps: '8-10', rest: '0' }] }));
+  await page.fill('[data-kg="0"]', '50');
+  await page.fill('[data-reps="0"]', '10');
+  await page.click('[data-set="0"]');
+  await expect(page.locator('#toast')).not.toContainText('récord');
+  await page.fill('[data-kg="1"]', '65');
+  await page.fill('[data-reps="1"]', '10');
+  await page.click('[data-set="1"]');
+  await expect(page.locator('#toast')).toContainText('¡Nuevo récord en Press de Banca con Barra! 1RM ≈ 87 kg (antes 80)');
+  // Solo avisa una vez por ejercicio en la sesión
+  expect(await page.evaluate(() => activeSession().prs)).toEqual(['bench-press']);
+});

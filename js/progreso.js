@@ -28,20 +28,36 @@ function weightChart(ws) {
     <text x="${P}" y="${H - 6}" class="axis">${shortDate(first)}</text><text x="${W - 10}" y="${H - 6}" text-anchor="end" class="axis">${shortDate(last.d)}</text>
   </svg><div class="muted small">Puntos = cada pesaje · Línea violeta = promedio de 7 días (más confiable que un día suelto).</div>`;
 }
+// Por ejercicio: sesiones, mejor 1RM, peso máximo, más repeticiones, mejor volumen y cada vez que rompiste tu récord
 function strengthStats() {
   const map = new Map();
-  for (const w of state.workouts) for (const x of w.ex) {
+  const ws = [...state.workouts].sort((a, b) => a.d.localeCompare(b.d));
+  for (const w of ws) for (const x of w.ex) {
     const withKg = x.sets.filter(z => z.kg);
-    if (!map.has(x.id)) map.set(x.id, { id: x.id, sessions: 0, best: null, pts: [] });
+    if (!map.has(x.id)) map.set(x.id, { id: x.id, sessions: 0, best: null, bestD: null, maxKg: null, maxReps: null, bestVol: null, pts: [], kgPts: [], volPts: [], prs: [] });
     const st = map.get(x.id);
     st.sessions++;
+    const vol = x.sets.reduce((a, z) => a + z.kg * z.reps, 0);
+    for (const z of x.sets) {
+      if (z.kg && (!st.maxKg || z.kg > st.maxKg.kg || (z.kg === st.maxKg.kg && z.reps > st.maxKg.reps))) st.maxKg = { ...z, d: w.d };
+      if (z.reps && (!st.maxReps || z.reps > st.maxReps.reps)) st.maxReps = { ...z, d: w.d };
+    }
+    if (vol && (!st.bestVol || vol > st.bestVol.v)) st.bestVol = { v: vol, d: w.d };
     if (withKg.length) {
       const top = withKg.reduce((a, z) => (e1rm(z) > e1rm(a) ? z : a));
-      if (!st.best || e1rm(top) > e1rm(st.best)) st.best = top;
+      if (st.best && e1rm(top) > e1rm(st.best)) st.prs.push({ d: w.d, ...top, prev: e1rm(st.best) });
+      if (!st.best || e1rm(top) > e1rm(st.best)) { st.best = top; st.bestD = w.d; }
       st.pts.push({ d: w.d, v: e1rm(top) });
+      st.kgPts.push({ d: w.d, v: Math.max(...withKg.map(z => z.kg)) });
+      st.volPts.push({ d: w.d, v: vol });
     }
   }
   return [...map.values()].filter(x => exById(x.id)).sort((a, b) => b.sessions - a.sessions);
+}
+// Récords rotos en los últimos días, del más nuevo al más antiguo
+function recentPRs(days = 30) {
+  const from = shiftKey(todayKey(), -days);
+  return strengthStats().flatMap(x => x.prs.filter(p => p.d >= from).map(p => ({ ...p, id: x.id }))).sort((a, b) => b.d.localeCompare(a.d));
 }
 function lineChart(pts, unit) {
   if (pts.length < 2) return '<p class="muted small">Necesitas al menos 2 sesiones con peso para ver la evolución.</p>';
@@ -62,8 +78,10 @@ function lineChart(pts, unit) {
 function strengthCard() {
   const st = strengthStats();
   const recent = state.workouts.slice(-5).reverse();
+  const prs = st.length ? recentPRs(30) : [];
   return `<div class="card">
     <div class="row"><h2>Fuerza</h2><span class="muted small">${state.workouts.length} entrenamientos registrados</span></div>
+    ${prs.length ? `<div class="pr-box"><b>🏆 Récords de los últimos 30 días: ${prs.length}</b>${prs.slice(0, 5).map(p => `<div class="pr-row"><span>${esc(exById(p.id).n)}</span><span class="muted small">${shortDate(p.d)} · ${p.kg} kg × ${p.reps}</span><b>+${r0(e1rm(p) - p.prev)} kg</b></div>`).join('')}</div>` : ''}
     ${st.length ? `<div class="list">${st.slice(0, 12).map(x => `
       <div class="item tappable" data-strength="${x.id}" role="button" tabindex="0">
         <div class="info"><div class="name">${esc(exById(x.id).n)}</div><div class="muted small">${x.sessions} ${x.sessions === 1 ? 'sesión' : 'sesiones'}${x.best ? ` · mejor serie ${x.best.kg} kg × ${x.best.reps}` : ''}</div></div>
@@ -380,9 +398,25 @@ bind.progreso = () => {
     const open = () => {
       const x = strengthStats().find(z => z.id === el.dataset.strength);
       const e = exById(x.id);
+      const metrics = { rm: [x.pts, '1RM estimado por sesión (kg)'], kg: [x.kgPts, 'Peso más alto por sesión (kg)'], vol: [x.volPts, 'Volumen por sesión (kg × reps)'] };
+      const rec = (ico, label, val, d) => `<div class="mini"><b>${val}</b><span>${ico} ${label}${d ? ' · ' + shortDate(d) : ''}</span></div>`;
       openModal(`<h2 style="padding-right:30px">${esc(e.n)}</h2>
-        <p class="muted small">1RM estimado por sesión (kg)</p>${lineChart(x.pts, 'kg')}
-        ${x.best ? `<div class="result-box">Mejor serie: <b>${x.best.kg} kg × ${x.best.reps}</b> · 1RM ≈ <b>${r0(e1rm(x.best))} kg</b></div>` : ''}`);
+        <div class="minis" style="grid-template-columns:repeat(2,1fr)">
+          ${x.best ? rec('🏆', '1RM estimado', r0(e1rm(x.best)) + ' kg', x.bestD) : ''}
+          ${x.maxKg ? rec('🏋️', 'Peso máximo', `${x.maxKg.kg} kg × ${x.maxKg.reps}`, x.maxKg.d) : ''}
+          ${x.maxReps ? rec('🔁', 'Más repeticiones', `${x.maxReps.reps}${x.maxReps.kg ? ' × ' + x.maxReps.kg + ' kg' : ''}`, x.maxReps.d) : ''}
+          ${x.bestVol ? rec('📦', 'Mejor volumen', r0(x.bestVol.v) + ' kg', x.bestVol.d) : ''}
+        </div>
+        <div class="chips" style="margin-top:10px">${Object.entries({ rm: '1RM', kg: 'Peso', vol: 'Volumen' }).map(([k, l]) => `<button class="chip ${k === 'rm' ? 'active' : ''}" data-metric="${k}">${l}</button>`).join('')}</div>
+        <p class="muted small" id="mLbl">${metrics.rm[1]}</p><div id="mChart">${lineChart(x.pts, 'kg')}</div>
+        ${x.prs.length ? `<p class="small">🎉 Rompiste tu récord <b>${x.prs.length} ${x.prs.length === 1 ? 'vez' : 'veces'}</b>, la última el ${shortDate(x.prs[x.prs.length - 1].d)}.</p>` : ''}`, m => {
+        m.querySelectorAll('[data-metric]').forEach(b => b.addEventListener('click', () => {
+          const [pts, lbl] = metrics[b.dataset.metric];
+          m.querySelectorAll('[data-metric]').forEach(z => z.classList.toggle('active', z === b));
+          m.querySelector('#mLbl').textContent = lbl;
+          m.querySelector('#mChart').innerHTML = lineChart(pts, b.dataset.metric === 'vol' ? 'kg vol.' : 'kg');
+        }));
+      });
     };
     el.addEventListener('click', open);
     el.addEventListener('keydown', ev => { if (ev.key === 'Enter') open(); });

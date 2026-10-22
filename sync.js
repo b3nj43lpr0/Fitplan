@@ -279,14 +279,17 @@
   // Espera máxima por intento; si no llega nada, se avisa en vez de quedar cargando para siempre
   const AI_TIMEOUT = 45000;
   const withTimeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => { const e = new Error('timeout: la IA tardó más de ' + ms / 1000 + ' s'); e.code = 'timeout'; rej(e); }, ms))]);
-  async function ask({ history = [], message, system, onChunk, timeoutMs = AI_TIMEOUT }) {
+  // image: { data (base64), mimeType } para preguntar por una foto; json: la respuesta viene como JSON
+  async function ask({ history = [], message, system, onChunk, image, json, maxTokens = 1024, timeoutMs = AI_TIMEOUT }) {
     if (!fb || !fb.app) { const e = new Error('offline'); e.code = 'offline'; throw e; }
     if (!S.user) { const e = new Error('auth'); e.code = 'auth'; throw e; }
     aiMod = aiMod || await import(BASE + 'firebase-ai.js');
     const ai = aiMod.getAI(fb.app, { backend: new aiMod.GoogleAIBackend() });
     const hist = history.map(h => ({ role: h.role === 'user' ? 'user' : 'model', parts: [{ text: h.text }] }));
     // Pensar poco (LOW) responde mucho más rápido; si un modelo no acepta la opción, se reintenta sin ella
-    const configs = [{ thinkingConfig: { thinkingLevel: 'LOW' }, maxOutputTokens: 1024 }, { maxOutputTokens: 1024 }];
+    const base = { maxOutputTokens: maxTokens, ...(json ? { responseMimeType: 'application/json' } : {}) };
+    const configs = [{ thinkingConfig: { thinkingLevel: 'LOW' }, ...base }, base];
+    const msg = image ? [message, { inlineData: { data: image.data, mimeType: image.mimeType } }] : message;
     let lastErr = null;
     for (const model of AI_MODELS) {
       for (const generationConfig of configs) {
@@ -294,7 +297,7 @@
           const gm = aiMod.getGenerativeModel(ai, { model, systemInstruction: system, generationConfig }, { timeout: timeoutMs });
           const chat = gm.startChat({ history: hist });
           const run = async () => {
-            const res = await chat.sendMessageStream(message);
+            const res = await chat.sendMessageStream(msg);
             let full = '';
             for await (const ch of res.stream) {
               let t = '';
