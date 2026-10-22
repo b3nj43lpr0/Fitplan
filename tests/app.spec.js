@@ -753,3 +753,36 @@ test('Biblioteca: grupos musculares finos y ejercicios extra de gimnasio', async
   expect(r.ids).toBe(r.total); // sin ids repetidos
   for (const [g, n] of Object.entries(r.groups)) expect(n, g).toBeGreaterThan(10);
 });
+
+test('IA gym: ejercicios sin series pasan al registro del gym para completar kg y reps', async ({ page }) => {
+  await fakeAI(page);
+  await page.evaluate(() => {
+    window.FitSync.ask = async o => { window.__asked.push(o); return JSON.stringify({ strength: [
+      { id: 'incline-db-curl', name: 'Curl inclinado con mancuernas', sets: [] },
+      { id: 'concentration-curl', name: 'Curl concentrado con barra Z', sets: [] },
+      { id: 'ez-bar-lying-tricep-extension', name: 'Press francés', sets: [] },
+      { id: 'tricep-pushdown', name: 'Extensión de tríceps hacia abajo', sets: [] },
+      { id: 'machine-shoulder-press', name: 'Press militar en máquina', sets: [] },
+      { id: 'lateral-raise', name: 'Elevación lateral con mancuernas', sets: [] },
+    ], cardio: [{ act: 'trotar', minutes: 15 }], minutes: null }); };
+  });
+  await page.click('[data-view=rutinas]');
+  await page.click('[data-tab-rut=actividad]');
+  await page.click('#aiEx');
+  await page.fill('#aeText', 'Curl inclinado con mancuernas y curl concentrado con barras en z, press frances y extension de triceps hacia abajo y press militar en maquina con elevación de mancuernas');
+  await page.click('#aeGo');
+  // Antes decía "No entendí ejercicios"; ahora muestra los 6 y pide completar las series
+  await expect(page.locator('.ai-result .ex-pick')).toHaveCount(6);
+  await expect(page.locator('.ai-result')).toContainText('Sin series');
+  expect(await page.evaluate(() => window.__asked.at(-1).system)).toContain('no inventes números');
+  await page.click('#aeEdit');
+  // Se abre el registro del gym con los 6 ejercicios y 3 series para llenar; el trote ya quedó guardado
+  await expect(page.locator('.gym-ex')).toHaveCount(6);
+  await expect(page.locator('.gym-ex').first()).toContainText('Curl con mancuernas en banco inclinado');
+  expect((await today(page)).exercises.some(e => e.name.startsWith('Trotar') && e.minutes === 15)).toBe(true);
+  await page.fill('[data-gs-kg="0:0"]', '10');
+  await page.fill('[data-gs-reps="0:0"]', '12');
+  await page.click('#gSave');
+  const w = (await state(page)).workouts.at(-1);
+  expect(w.ex).toEqual([{ id: 'incline-db-curl', sets: [{ kg: 10, reps: 12 }] }]); // solo las series con repeticiones
+});
