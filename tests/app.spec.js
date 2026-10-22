@@ -521,7 +521,8 @@ test('Coach: chat con IA (simulada), contexto sin datos personales y coach bási
 // IA simulada para las funciones nuevas: responde según lo que se le pide
 async function fakeAI(page) {
   await page.evaluate(() => {
-    Object.assign(window.FitSync.state, { enabled: true, user: { name: 'x' } });
+    // Sesión simulada fija: si Firebase real carga (el service worker lo descarga aunque se bloquee en la página), no la borra
+    for (const [k, v] of [['enabled', true], ['user', { name: 'x' }]]) Object.defineProperty(window.FitSync.state, k, { get: () => v, set() {}, configurable: true });
     window.__asked = [];
     window.FitSync.ask = async o => {
       window.__asked.push(o);
