@@ -235,7 +235,13 @@ function allRecipes() { return [...RECIPES, ...state.customRecipes]; }
 function allFoods() { return [...FOODS, ...state.customFoods]; }
 function foodById(id) { return allFoods().find(f => f.id === id); }
 // La biblioteca de ejercicios (≈700 KB) se carga solo cuando hace falta
-function exDB() { return typeof EXERCISE_DB !== 'undefined' ? (state.customExercises.length ? [...EXERCISE_DB, ...state.customExercises] : EXERCISE_DB) : []; }
+// Biblioteca: RepDB + ejercicios de gimnasio extra (data.js) + los que creaste tú
+let exAll = null;
+function exDB() {
+  if (typeof EXERCISE_DB === 'undefined') return [];
+  if (!exAll) exAll = [...EXERCISE_DB, ...EXTRA_EXERCISES];
+  return state.customExercises.length ? [...exAll, ...state.customExercises] : exAll;
+}
 function exReady() { return typeof EXERCISE_DB !== 'undefined'; }
 function loadExercises() {
   if (exReady()) return Promise.resolve();

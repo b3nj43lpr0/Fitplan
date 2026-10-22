@@ -89,6 +89,7 @@ function viewEjercicio() {
   const t = totals(d);
   return `
     ${dateBar()}
+    ${(() => { const g = gymDraft(); return `<button class="gym-btn" id="gymLog"><span>🏋️</span><b>Registrar ejercicios del gym</b><small>${g && !g.wid && g.items.length ? `Tienes ${g.items.length} ${g.items.length === 1 ? 'ejercicio' : 'ejercicios'} sin guardar · toca para seguir` : 'Elige el músculo y el ejercicio, anota series, peso y repeticiones. Calcula las calorías.'}</small></button>`; })()}
     <button class="ai-btn wide" id="aiEx"><span>💬</span><b>Cuéntame qué entrenaste</b><small>"press banca 3x10 con 60 kg y 20 min de trote" · la IA lo registra</small></button>
     ${cardioCard()}
     <div class="grid g2">
@@ -115,6 +116,7 @@ function viewEjercicio() {
           <div class="item">
             <div class="info"><div class="name">${esc(e.name)}</div><div class="muted small">${e.minutes ? e.minutes + ' min' : 'manual'}</div></div>
             <span class="kcal" style="color:var(--burn)">−${r0(e.kcal)}</span>
+            ${e.wid && state.workouts.some(w => w.id === e.wid) ? `<button class="icon-btn" data-edit-gym="${e.wid}" aria-label="Editar">✏️</button>` : ''}
             <button class="icon-btn" data-del-ex="${e.id}" aria-label="Eliminar">✕</button>
           </div>`).join('') : '<div class="empty">Nada registrado todavía.</div>'}</div>
         <p class="muted small">Las calorías del ejercicio se suman a tu presupuesto del día: si quemas 300 kcal, puedes comer 300 kcal más y mantener tu objetivo. Calculado con tu peso (${r1(currentWeight())} kg).</p>
@@ -125,6 +127,8 @@ bind.ejercicio = () => {
   bindDateBar();
   bindCardio();
   $('#aiEx').addEventListener('click', openAIExercise);
+  $('#gymLog').addEventListener('click', () => openGymLog());
+  $$('[data-edit-gym]').forEach(b => b.addEventListener('click', () => openGymLog(b.dataset.editGym)));
   const upd = () => {
     const a = ACTIVITIES.find(x => x.id === $('#act').value);
     const m = Number($('#mins').value) || 0;
@@ -156,6 +160,12 @@ bind.ejercicio = () => {
     save(); toast('Ejercicio registrado 💪'); render();
   });
   $$('[data-del-ex]').forEach(b => b.addEventListener('click', () => {
-    removeWithUndo(day().exercises, e => e.id === b.dataset.delEx, 'Actividad eliminada');
+    const e = day().exercises.find(x => x.id === b.dataset.delEx);
+    const wi = e && e.wid ? state.workouts.findIndex(w => w.id === e.wid) : -1;
+    if (wi < 0) return removeWithUndo(day().exercises, x => x.id === b.dataset.delEx, 'Actividad eliminada');
+    // Una sesión del gym: se borran también sus series (y se recuperan juntas al deshacer)
+    const list = day().exercises, i = list.indexOf(e), [w] = state.workouts.splice(wi, 1);
+    list.splice(i, 1); save(); render();
+    toast('Entrenamiento eliminado', () => { list.splice(Math.min(i, list.length), 0, e); state.workouts.splice(Math.min(wi, state.workouts.length), 0, w); save(); render(); });
   }));
 };

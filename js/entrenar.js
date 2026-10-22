@@ -278,7 +278,7 @@ function viewBiblioteca() {
   const list = exDB().filter(e =>
     (ui.exGroup === 'todos' || e.g === ui.exGroup)
     && (ui.exEquip === 'todos' || (ui.exEquip === 'casa' ? e.bw : ui.exEquip === 'casa_equipo' ? e.home : !e.home))
-    && (!q || norm(e.n + ' ' + e.m.join(' ') + ' ' + e.eq).includes(q)));
+    && (!q || exSearch(e, q)));
   const shown = list.slice(0, 60);
   return `
     <div class="card">
