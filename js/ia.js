@@ -193,7 +193,7 @@ function aiExerciseReview(box, strength, cardio, minutes, note) {
   let mins = Math.round(minutes || nSets * 2.5);
   const prevOf = x => (x.e ? bestE1rm(x.e.id) : 0);
   const paint = () => {
-    const kcalW = strength.length ? burnedKcal(5, mins) : 0;
+    const kcalW = strength.length ? burnedKcal(gymMet(strength.map(x => ({ id: x.e && x.e.id, sets: x.sets }))), mins) : 0;
     const kcalC = cardio.reduce((a, x) => a + burnedKcal(x.a.met, x.minutes), 0);
     box.innerHTML = `<div class="ai-result">
       ${strength.length ? `<h3>🏋️ Pesas</h3><div class="list">${strength.map((x, i) => {
@@ -233,12 +233,8 @@ function aiExerciseReview(box, strength, cardio, minutes, note) {
     // Si un ejercicio aparece dos veces, se juntan sus series
     const merged = [];
     for (const x of ex) { const y = merged.find(z => z.id === x.id); y ? y.sets.push(...x.sets) : merged.push({ ...x, sets: [...x.sets] }); }
-    const prs = merged.length ? newPRs(merged) : [];
+    const prs = merged.length ? logStrength(merged, mins, burnedKcal(gymMet(merged), mins), { name: 'Pesas' }) : [];
     const d = day();
-    if (merged.length) {
-      state.workouts.push({ id: uid(), d: currentDate, name: 'Entrenamiento registrado', minutes: mins, ex: merged, ai: true });
-      d.exercises.push({ id: uid(), name: 'Pesas: ' + merged.map(x => exById(x.id).n).slice(0, 3).join(', ') + (merged.length > 3 ? '…' : ''), minutes: mins, kcal: burnedKcal(5, mins) });
-    }
     for (const x of cardio) d.exercises.push({ id: uid(), name: x.a.name + (x.km ? ` · ${x.km.toLocaleString('es')} km` : ''), minutes: x.minutes, kcal: burnedKcal(x.a.met, x.minutes), km: x.km || undefined });
     save(); closeModal(); render(); tap();
     if (prs.length) { confetti(60); toast(`🏆 ¡Nuevo récord en ${prs.join(', ')}!`); } else toast('Entrenamiento guardado 💪');

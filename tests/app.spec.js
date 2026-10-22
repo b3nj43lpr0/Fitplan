@@ -671,3 +671,85 @@ test('Récords: aviso en vivo al superar tu marca durante el entrenamiento', asy
   // Solo avisa una vez por ejercicio en la sesión
   expect(await page.evaluate(() => activeSession().prs)).toEqual(['bench-press']);
 });
+
+test('Gym: elegir ejercicios por músculo, anotar series y calorías, editar y borrar', async ({ page }) => {
+  await page.click('[data-view=rutinas]');
+  await page.click('[data-tab-rut=actividad]');
+  await page.click('#gymLog');
+  // Primero se elige el ejercicio: por músculo, equipo o búsqueda con nombres de gimnasio
+  await page.click('[data-gg=triceps]');
+  await page.click('[data-ge=polea]');
+  await expect(page.locator('[data-gp="x-rope-pushdown"]')).toBeVisible();
+  await page.click('[data-gg=todos]');
+  await page.click('[data-ge=todos]');
+  await page.fill('#gQ', 'press frances');
+  await expect(page.locator('[data-gp]').first()).toBeVisible();
+  expect(await page.locator('[data-gp]').count()).toBeGreaterThan(0);
+  await page.fill('#gQ', 'cruce poleas');
+  await page.click('[data-gp="x-cable-crossover-high"]');
+  await page.fill('#gQ', 'press banca barra');
+  await page.click('[data-gp="bench-press"]');
+  await expect(page.locator('#gDone')).toHaveText(/2 ejercicios/);
+  await page.click('#gDone');
+  // El press de banca parte con las series de la última vez; el cruce de poleas con 3 vacías
+  await expect(page.locator('.gym-ex')).toHaveCount(2);
+  await expect(page.locator('.gym-ex').nth(1)).toContainText('última vez');
+  await page.fill('[data-gs-kg="0:0"]', '15');
+  await page.fill('[data-gs-reps="0:0"]', '12');
+  await page.fill('[data-gs-kg="0:1"]', '15');
+  await page.fill('[data-gs-reps="0:1"]', '10');
+  await page.click('[data-gs-del="0:2"]'); // la tercera serie no se hizo
+  await page.fill('[data-gs-kg="1:0"]', '70'); // récord: 70 × 10
+  await expect(page.locator('.gym-ex').nth(1).locator('.pr-tag')).toBeVisible();
+  await page.click('[data-gs-add="1"]');
+  // Las calorías dependen de la duración y la intensidad
+  const kcal = async () => Number(await page.locator('.gym-sum .mini').nth(2).locator('b').textContent());
+  await page.fill('#gMin', '45');
+  const k1 = await kcal();
+  expect(k1).toBeGreaterThan(150);
+  await page.click('[data-gi=intensa]');
+  expect(await kcal()).toBeGreaterThan(k1);
+  // Si se cierra sin guardar, el borrador queda guardado
+  await page.click('.modal-x');
+  await expect(page.locator('#gymLog')).toContainText('2 ejercicios sin guardar');
+  await page.click('#gymLog');
+  await expect(page.locator('.gym-ex')).toHaveCount(2);
+  const w0 = (await state(page)).workouts.length;
+  await page.click('#gSave');
+  await expect(page.locator('#toast')).toContainText('Nuevo récord en Press de Banca con Barra');
+  let s = await state(page);
+  expect(s.workouts).toHaveLength(w0 + 1);
+  const w = s.workouts.at(-1);
+  expect(w.minutes).toBe(45);
+  expect(w.ex[0]).toEqual({ id: 'x-cable-crossover-high', sets: [{ kg: 15, reps: 12 }, { kg: 15, reps: 10 }] });
+  expect(w.ex[1].sets[0].kg).toBe(70);
+  const entry = (await today(page)).exercises.at(-1);
+  expect(entry.wid).toBe(w.id);
+  expect(entry.name).toContain('Cruce de Poleas');
+  expect(Math.round(entry.kcal)).toBeGreaterThan(k1);
+  expect(await page.evaluate(() => gymDraft())).toBeNull();
+  // Editar: se reemplaza la misma sesión
+  await page.click(`[data-edit-gym="${w.id}"]`);
+  await page.fill('[data-gs-reps="0:1"]', '11');
+  await page.click('#gSave');
+  s = await state(page);
+  expect(s.workouts).toHaveLength(w0 + 1);
+  expect(s.workouts.at(-1).ex[0].sets[1].reps).toBe(11);
+  expect((await today(page)).exercises.filter(e => e.wid === w.id)).toHaveLength(1);
+  // Borrar quita también las series; deshacer las recupera
+  await page.click(`[data-del-ex="${(await today(page)).exercises.find(e => e.wid === w.id).id}"]`);
+  expect((await state(page)).workouts).toHaveLength(w0);
+  await page.click('.toast-undo');
+  expect((await state(page)).workouts).toHaveLength(w0 + 1);
+});
+
+test('Biblioteca: grupos musculares finos y ejercicios extra de gimnasio', async ({ page }) => {
+  const r = await page.evaluate(async () => {
+    await loadExercises();
+    const db = exDB(), by = g => db.filter(e => e.cat !== 'estiramiento' && e.cat !== 'cardio' && exMuscle(e) === g).length;
+    return { total: db.length, extra: db.filter(e => e.id.startsWith('x-')).length, groups: Object.fromEntries(MUSCLE_GROUPS.map(([k]) => [k, by(k)])), ids: new Set(db.map(e => e.id)).size };
+  });
+  expect(r.extra).toBeGreaterThan(50);
+  expect(r.ids).toBe(r.total); // sin ids repetidos
+  for (const [g, n] of Object.entries(r.groups)) expect(n, g).toBeGreaterThan(10);
+});

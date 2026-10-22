@@ -63,6 +63,15 @@ Toca 💬 en Hoy (o Progreso → Resumen) para preguntarle cosas como "¿qué hi
 
 Para activarlo: Firebase → Compilación → **AI Logic** → Comenzar → elige **Gemini Developer API** (la opción sin costo) → Activar. Si App Check está aplicado para AI Logic, desactívalo en Seguridad → App Check → APIs → Firebase AI Logic → Dejar de aplicar (la app no usa App Check; el coach exige sesión iniciada). Luego inicia sesión con Google en Perfil → Sincronización: el coach con IA solo funciona con sesión iniciada. Sin conexión, sin sesión o si se acaba la cuota gratis, responde un coach básico que analiza tus números sin IA.
 
+## Registrar ejercicios del gimnasio
+
+En Entrenar → Actividad → **🏋️ Registrar ejercicios del gym**:
+- Eliges los ejercicios por músculo (pecho, espalda, hombros, bíceps, tríceps, antebrazo, cuádriceps, femoral, glúteos, pantorrillas, abdomen, cuerpo completo), por equipo (máquina, barra, mancuernas, polea, peso corporal) o buscando con los nombres del gimnasio ("press francés", "cruce de poleas", "jalón", "prensa 45", "femoral"…). Primero salen los que ya hiciste y los más comunes.
+- La biblioteca tiene más de 700 ejercicios: los de RepDB más 60 de máquinas y variantes comunes en gimnasios (`EXTRA_EXERCISES` en `data.js`).
+- Por cada ejercicio anotas las series con kg × repeticiones (parte con lo que hiciste la última vez). Te avisa si una serie es récord.
+- Calcula las calorías con tu peso, el tipo de ejercicios, la duración y la intensidad. Se guarda como actividad del día (suma a tu presupuesto de calorías) y como entrenamiento con series (récords y gráficos de fuerza).
+- Si cierras sin guardar, queda como borrador. Con ✏️ editas una sesión guardada y con ✕ la borras (con deshacer).
+
 ### Más funciones con la misma IA
 
 - **Foto del plato** (Comidas → 📸): la IA reconoce los alimentos y estima cantidades y calorías.
@@ -89,7 +98,7 @@ Cada cambio corre `npm test` en GitHub (pruebas de la app en un navegador con ta
 ## Archivos
 
 - `index.html`, `styles.css`: la página y el diseño.
-- `js/`: el código, un archivo por parte (`core.js` con estado, cálculos y navegación; `hoy.js`, `comidas.js`, `actividad.js`, `recetas.js`, `entrenar.js`, `progreso.js`, `perfil.js`, `coach.js` e `ia.js` con las funciones de IA; `main.js` arranca la app).
+- `js/`: el código, un archivo por parte (`core.js` con estado, cálculos y navegación; `hoy.js`, `comidas.js`, `actividad.js`, `recetas.js`, `entrenar.js`, `progreso.js`, `perfil.js`, `gym.js` para registrar el gimnasio, `coach.js` e `ia.js` con las funciones de IA; `main.js` arranca la app).
 - `sync.js`, `firebase-config.js`, `firestore.rules`: sincronización con Firebase.
 - `tests/`: pruebas automáticas.
 - `foods.js`: alimentos (USDA SR Legacy, dominio público).
