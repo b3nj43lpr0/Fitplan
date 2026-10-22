@@ -187,6 +187,7 @@ function weeklyReport(start) {
 function showWeekly(start) {
   const w = weeklyReport(start);
   const word = w.def >= 0 ? 'déficit' : 'superávit';
+  const ai = typeof aiReady === 'function' && (aiReady() || storedReview(start));
   openModal(`<div class="weekly">
     <div class="rc-hero">📊</div>
     <h2 style="margin-bottom:2px">Tu semana</h2>
@@ -200,8 +201,11 @@ function showWeekly(start) {
       <div class="mini"><b>${w.trainDays}</b><span>días con ejercicio</span></div>
     </div>
     ${w.wch !== null ? `<p class="small">⚖️ Peso: <b>${w.wch > 0 ? '+' : ''}${r1(w.wch)} kg</b> en la semana.</p>` : ''}
-    <div class="hint-box">💡 ${esc(w.tip)}</div>
-    <button class="btn" id="wkOk" style="width:100%">¡Vamos por esta semana!</button></div>`, m => m.querySelector('#wkOk').addEventListener('click', closeModal));
+    ${ai ? '<div class="ai-review"><div class="ai-review-h">🤖 Revisión del coach</div><div id="wkAI"></div></div>' : `<div class="hint-box">💡 ${esc(w.tip)}</div>`}
+    <button class="btn" id="wkOk" style="width:100%">¡Vamos por esta semana!</button></div>`, m => {
+    m.querySelector('#wkOk').addEventListener('click', closeModal);
+    if (ai) weeklyReview(start, m.querySelector('#wkAI'));
+  });
 }
 function maybeWeekly() {
   const last = shiftKey(mondayOf(todayKey()), -7);

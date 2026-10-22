@@ -195,7 +195,7 @@ function viewRecetas() {
         <div class="muted small">Tu próxima comida · ${MEAL_ICO[meal.id]} ${meal.name.toLowerCase()}</div>
         <b>${left > 0 ? `Apunta a unas ${r0(target)} kcal` : 'Ya cubriste tu meta: algo liviano'}</b>
       </div>
-      <button class="btn" id="suggestBtn">✨ Sugerir</button>
+      <div class="btn-col"><button class="btn" id="suggestBtn">✨ Sugerir</button><button class="btn ghost sm" id="aiMeal">🤖 Con IA</button></div>
     </div>
     ${sugg.length ? `<h2>Sugerencias para ti</h2><div class="rgrid">${sugg.map(r => recipeCard(r, scaleFactor(r, left > 0 ? target : 200), 'Porción ajustada a lo que te queda hoy')).join('')}</div>` : ''}
     <div class="row" style="margin-top:8px"><h2 style="margin:0">Todas las recetas</h2><button class="btn sm" id="newRecipe">＋ Crear receta</button></div>
@@ -287,6 +287,8 @@ bind.recetas = () => {
   // Al escribir solo se redibuja la lista, así el teclado no se cierra
   const rs = $('#recSearch');
   if (rs) rs.addEventListener('input', () => { ui.recipeQuery = rs.value; $('#recList').innerHTML = recipeListHtml(); bindLogRecipe(todayKey(), $('#recList')); });
+  const am = $('#aiMeal');
+  if (am) am.addEventListener('click', openAIMeal);
   const sb = $('#suggestBtn');
   if (sb) sb.addEventListener('click', () => {
     const { meal, target, left } = nextMealTarget();

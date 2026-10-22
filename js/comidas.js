@@ -85,6 +85,10 @@ function viewComidas() {
     ${dateBar()}
     <div class="left-bar"><span>${left >= 0 ? `Te quedan <b>${r0(left)} kcal</b>` : `Te pasaste <b>${r0(-left)} kcal</b>`}</span><span class="muted small">P ${r0(t.p)}/${r0(tg.prot)} g</span></div>
     <div class="meal-pick" role="radiogroup" aria-label="Agregar a">${MEALS.map(m => `<button class="${m.id === ui.meal ? 'on' : ''}" data-pick-meal="${m.id}" role="radio" aria-checked="${m.id === ui.meal}"><span>${MEAL_ICO[m.id]}</span>${m.name}</button>`).join('')}</div>
+    <div class="ai-row">
+      <button class="ai-btn" id="aiPhoto"><span>📸</span><b>Foto del plato</b><small>La IA calcula</small></button>
+      <button class="ai-btn" id="aiText"><span>💬</span><b>Escribe o dicta</b><small>"2 huevos y pan"</small></button>
+    </div>
     <div class="card">
       <div class="search-row">
         <input id="foodSearch" type="search" placeholder="Buscar alimento…" value="${esc(ui.foodQuery)}" autocomplete="off">
@@ -183,6 +187,8 @@ bind.comidas = () => {
   bindList();
   $('#foodSearch').addEventListener('input', e => { ui.foodQuery = e.target.value; ui.foodLimit = 40; refresh(); });
   $('#scanBtn').addEventListener('click', openScanner);
+  $('#aiPhoto').addEventListener('click', () => openAIFood('foto'));
+  $('#aiText').addEventListener('click', () => openAIFood('texto'));
   $$('[data-cat]').forEach(b => b.addEventListener('click', () => {
     ui.foodCat = b.dataset.cat; ui.foodLimit = 40;
     $$('[data-cat]').forEach(x => x.classList.toggle('active', x === b));
