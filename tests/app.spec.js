@@ -14,6 +14,8 @@ test.beforeEach(async ({ page }) => {
   page.on('dialog', d => d.accept());
   page.errors = [];
   page.on('pageerror', e => page.errors.push(e.message));
+  // Sin Firebase real: así la sesión simulada de la IA no se pierde cuando Firebase responde (en CI hay internet)
+  await page.route('https://www.gstatic.com/firebasejs/**', r => r.abort());
   await page.goto('/index.html');
   await page.evaluate(f => localStorage.setItem('fitplan-v1', JSON.stringify(f)), fixture());
   await page.reload();
