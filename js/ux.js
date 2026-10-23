@@ -6,7 +6,7 @@ const QUICK_ADD = [
   ['foto', '📸', 'Foto del plato', () => openAIFood('foto')],
   ['texto', '💬', 'Escribir o dictar', () => openAIFood('texto')],
   ['buscar', '🔍', 'Buscar alimento', () => { closeModal(); currentDate = todayKey(); ui.foodQuery = ''; ui.comTab = 'registrar'; go('comidas'); setTimeout(() => { const i = $('#foodSearch'); if (i) i.focus(); }, 50); }],
-  ['escanear', '📷', 'Escanear código', () => openScanner()],
+  ['escanear', '🧾', 'Escanear código', () => openScanner()],
   ['agua', '💧', 'Vaso de agua', () => { closeModal(); day(todayKey()).water++; save(); render(); tap(); toast(`💧 +1 vaso · llevas ${peekDay(todayKey()).water} de ${calcTargets().water}`); }],
   ['peso', '⚖️', 'Anotar peso', () => openWeightQuick()],
   ['gym', '🏋️', 'Ejercicios del gym', () => { currentDate = todayKey(); openGymLog(); }],

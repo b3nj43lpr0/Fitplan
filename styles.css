@@ -1033,3 +1033,22 @@ body.has-wbar main { padding-bottom: calc(150px + env(safe-area-inset-bottom)); 
 .toast:not(.show) { opacity: 0; visibility: hidden; }
 /* Espacio al final para que el botón ＋ y la barra de entrenamiento no tapen lo último */
 @media (max-width: 760px) { body:not([data-view=coach]) #main { padding-bottom: calc(110px + env(safe-area-inset-bottom)); } body.has-wbar:not([data-view=coach]) #main { padding-bottom: calc(160px + env(safe-area-inset-bottom)); } }
+
+/* ---------- Íconos: emojis Fluent 3D (.emo) y burbujas de color (.bub) ---------- */
+.emo { display: inline-block; width: 1.2em; height: 1.2em; vertical-align: -.22em; background: center / contain no-repeat; overflow: hidden; text-indent: 3em; white-space: nowrap; line-height: 1.2em; }
+.bub { position: relative; display: inline-grid; place-items: center; width: 1.6em; height: 1.6em; border-radius: .46em; background: var(--c); color: #fff; vertical-align: middle; margin-right: .2em; flex-shrink: 0; }
+.bub svg { width: 60%; height: 60%; }
+.bub i { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+h1 .bub, h2 .bub, h3 .bub { width: 1.45em; height: 1.45em; margin-right: .3em; vertical-align: -.3em; }
+.qa-tile span:has(.bub) { font-size: 0; }
+.qa-tile .bub { width: 48px; height: 48px; border-radius: 15px; margin: 0; font-size: 16px; }
+.meal-head .ico-c:has(.bub) { background: none; }
+.ico-c > .bub { width: 100%; height: 100%; border-radius: 12px; margin: 0; }
+.ico-c > .bub svg { width: 56%; height: 56%; }
+.nudge .ni .bub { width: 40px; height: 40px; border-radius: 12px; margin: 0; font-size: 16px; }
+.meal-pick button .bub { width: 1.5em; height: 1.5em; margin: 0; }
+.meal-pick button.on .bub { box-shadow: 0 0 0 2px var(--card); }
+.stat .tile-ico:has(.bub) { background: none; }
+.tile-ico .bub { width: 38px; height: 38px; border-radius: 12px; margin: 0; font-size: 16px; }
+.ico-c .emo { font-size: 22px; }
+.ai-btn .bub { width: 44px; height: 44px; border-radius: 13px; margin: 0; font-size: 16px; }

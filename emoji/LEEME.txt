@@ -1,0 +1,4 @@
+Emojis 3D: Fluent Emoji de Microsoft (licencia MIT), https://github.com/microsoft/fluentui-emoji
+Reducidos a 96 px en WebP. 1fadc.webp (raíz/betarraga) fue dibujado para FitPlan porque Fluent no lo tiene.
+Íconos en burbuja (js/emoji.js): MingCute (Apache 2.0), https://github.com/Richard9394/MingCute
+La ensalada, la palmera y la calculadora fueron dibujadas para FitPlan.
