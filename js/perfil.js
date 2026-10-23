@@ -39,6 +39,7 @@ function viewPerfil() {
           <div class="macro-pills" style="margin-top:14px"><span style="color:var(--prot)">Proteína <b>${r0(tg.prot)} g</b></span><span style="color:var(--carb)">Carbos <b>${r0(tg.carb)} g</b></span><span style="color:var(--fat)">Grasas <b>${r0(tg.fat)} g</b></span><span style="color:var(--prot)">Agua <b>${r1(tg.water * 0.25)} L</b></span></div>
           <p class="muted small">Cálculo con la fórmula Mifflin-St Jeor. Es una estimación: activa el ajuste automático en Progreso para que se corrija con tu peso real.</p>
         </div>` : ''}
+        ${watchPerfilCard()}
         <div class="card">
           <h2>Respaldo</h2>
           <p class="muted small" style="margin-top:-6px">Descarga una copia de respaldo de todos tus datos o restaura una copia anterior.</p>
