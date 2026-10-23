@@ -77,6 +77,38 @@ const ok = (c, msg) => { console.log((c ? 'OK  ' : 'FAIL') + ' ' + msg); if (!c)
   for (const D of [A, B]) {
     ok(D.state.days['2026-10-20'].foods.length === 2 && D.state.days['2026-10-21'].water === 8, `${D.name}: se conservan ambos cambios del mismo mes`);
   }
+  // MISMO día en los dos dispositivos a la vez (teléfono anota comida, PC anota otra cosa): no se pierde nada
+  A.state = { ...A.state, days: { ...A.state.days, '2026-10-20': { ...A.state.days['2026-10-20'], foods: [...A.state.days['2026-10-20'].foods, { id: 'tel1', kcal: 450 }] } } };
+  B.state = { ...B.state, days: { ...B.state.days, '2026-10-20': { ...B.state.days['2026-10-20'], foods: [...B.state.days['2026-10-20'].foods, { id: 'pc1', kcal: 120 }], water: 5 } } };
+  await Promise.all([A.api._test.push(), B.api._test.push()]);
+  await sleep(80);
+  for (const D of [A, B]) {
+    const ids = D.state.days['2026-10-20'].foods.map(f => f.id);
+    ok(ids.includes('tel1') && ids.includes('pc1') && D.state.days['2026-10-20'].water === 5, `${D.name}: mismo día editado en ambos: se juntan las comidas de los dos`);
+  }
+  // Un dispositivo cambió el día sin conexión y la nube tiene otra versión: al reconectar se juntan
+  B.state = { ...B.state, days: { ...B.state.days, '2026-10-22': { foods: [{ id: 'off1', kcal: 300 }], exercises: [], water: 1 } } };
+  A.state = { ...A.state, days: { ...A.state.days, '2026-10-22': { foods: [{ id: 'on1', kcal: 200 }], exercises: [{ id: 'e1', kcal: 100 }], water: 0 } } };
+  await A.api._test.push(); await sleep(30);
+  await B.api._test.push(); await sleep(80);
+  for (const D of [A, B]) {
+    const x = D.state.days['2026-10-22'];
+    ok(x && x.foods.length === 2 && x.exercises.length === 1 && x.water === 1, `${D.name}: día anotado sin conexión se junta con la nube`);
+  }
+  // Alimentos propios creados en los dos a la vez
+  A.state = { ...A.state, customFoods: [...(A.state.customFoods || []), { id: 'cA', name: 'Uno' }] };
+  B.state = { ...B.state, customFoods: [...(B.state.customFoods || []), { id: 'cB', name: 'Dos' }] };
+  await Promise.all([A.api._test.push(), B.api._test.push()]);
+  await sleep(80);
+  ok([A, B].every(D => (D.state.customFoods || []).length === 2), 'alimentos propios creados en ambos se conservan');
+  // Aviso en vivo cortado (PC suspendido): al volver a la app, refresh() trae lo nuevo
+  const saved = listeners.splice(0);
+  A.state = { ...A.state, days: { ...A.state.days, '2026-10-23': { foods: [{ id: 'z1', kcal: 99 }], exercises: [], water: 0 } } };
+  await A.api._test.push(); await sleep(30);
+  ok(!B.state.days['2026-10-23'], 'sin aviso en vivo, B todavía no lo tiene');
+  await B.api._test.refresh();
+  ok(B.state.days['2026-10-23'] && B.state.days['2026-10-23'].foods[0].id === 'z1' && /Sincronizado/.test(B.api.state.status) && B.api.state.last > 0, 'al volver a la app, B trae lo nuevo de la nube');
+  listeners.push(...saved);
   // Cambio en base (perfil) en A y en un día en B al mismo tiempo
   A.state = { ...A.state, profile: { nombre: 'Benjamín' } };
   B.state = { ...B.state, days: { ...B.state.days, '2026-10-21': { ...B.state.days['2026-10-21'], water: 9 } } };

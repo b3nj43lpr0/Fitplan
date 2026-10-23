@@ -84,8 +84,9 @@ function syncCardHtml() {
   if (!S || !S.enabled) return `<h2>Sincronización</h2><p class="muted small" style="margin-top:-6px">Aún no está configurada. Mientras tanto, usa Exportar e Importar para pasar tus datos entre dispositivos.</p>`;
   return `<h2>Sincronización</h2>
     <p class="muted small" style="margin-top:-6px">${S.user ? `Sesión: <b>${esc(S.user.email || S.user.name || '')}</b>. Tus datos se comparten entre todos tus dispositivos.` : 'Inicia sesión con Google para tener tus datos igual en el PC y en el teléfono.'}</p>
-    <p class="small" id="syncStatus">${esc(S.status)}</p>
-    <div class="btn-row">${S.user ? '<button class="btn ghost sm" id="syncOut">Cerrar sesión</button>' : '<button class="btn sm" id="syncIn">Iniciar sesión con Google</button>'}</div>`;
+    <p class="small" id="syncStatus">${esc(S.status)}${S.last ? ` <span class="muted">· ${new Date(S.last).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}</span>` : ''}</p>
+    ${S.user ? `<p class="muted small">Perfil que se sincroniza: <b>${esc((profilesIndex().list.find(x => x.id === PROFILE_ID) || {}).name || state.profile && state.profile.nombre || 'principal')}</b>${PROFILE_ID === 'p1' ? ' (principal)' : ' (secundario: en el otro dispositivo elige este mismo perfil)'}. Para ver lo mismo en el PC y el teléfono, usa la misma cuenta de Google y el mismo perfil en ambos.</p>` : ''}
+    <div class="btn-row">${S.user ? '<button class="btn sm" id="syncNow">🔄 Sincronizar ahora</button><button class="btn ghost sm" id="syncOut">Cerrar sesión</button>' : '<button class="btn sm" id="syncIn">Iniciar sesión con Google</button>'}</div>`;
 }
 let offSync = null;
 bind.perfil = () => {
@@ -109,6 +110,8 @@ bind.perfil = () => {
     const i = $('#syncIn'), o = $('#syncOut');
     if (i) i.addEventListener('click', () => window.FitSync.signIn());
     if (o) o.addEventListener('click', () => window.FitSync.signOut());
+    const n = $('#syncNow');
+    if (n) n.addEventListener('click', async () => { n.disabled = true; await window.FitSync.syncNow(); toast(window.FitSync.state.status); render(); });
   };
   paint();
   if (offSync) offSync();

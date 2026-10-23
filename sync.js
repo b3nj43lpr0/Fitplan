@@ -94,6 +94,27 @@
     return out;
   }
 
+  // Conflicto: la misma unidad cambió aquí y en otro dispositivo. En vez de quedarse con una versión, se juntan:
+  // en un día, las comidas y actividades de ambos (por id) y el agua mayor; en listas (alimentos propios, pesos,
+  // combos…), los elementos de ambos. En el resto (perfil, rutina…) manda lo de este dispositivo.
+  const LISTS = { customFoods: i => i.id || i.name, weights: i => i.d, measures: i => i.d + JSON.stringify(i), customRecipes: i => i.id, customExercises: i => i.id, challenges: i => i.id + i.start, combos: i => i.id };
+  function mergeUnit(u, local, remote) {
+    if (local === undefined) return remote; // borrado aquí, cambiado allá: se conserva el cambio
+    if (remote === undefined) return local;
+    const key = u.slice(2);
+    if (u[0] === 'd') {
+      const id = i => i.id || JSON.stringify(i);
+      const join = (a = [], b = []) => [...a, ...b.filter(r => !a.some(l => id(l) === id(r)))];
+      return { ...remote, ...local, foods: join(local.foods, remote.foods), exercises: join(local.exercises, remote.exercises), water: Math.max(local.water || 0, remote.water || 0) };
+    }
+    if (u[0] === 'b' && LISTS[key] && Array.isArray(local) && Array.isArray(remote)) {
+      const out = [...local, ...remote.filter(r => !local.some(l => LISTS[key](l) === LISTS[key](r)))];
+      return key === 'weights' ? out.sort((a, b) => (a.d < b.d ? -1 : 1)) : out;
+    }
+    if (u[0] === 'b' && (key === 'badges' || key === 'favFoods') && Array.isArray(local) && Array.isArray(remote)) return [...new Set([...local, ...remote])];
+    return local;
+  }
+
   // ---------- Recibir un documento ----------
   // Por unidad: si este dispositivo no la tocó desde la última sincronización, se adopta la de la nube;
   // si la tocó, se mantiene la local (se enviará en el próximo push).
@@ -112,6 +133,12 @@
         if (R === undefined) delete synced[u]; else synced[u] = [R, docId];
       } else if (R === L) {
         if (R === undefined) delete synced[u]; else synced[u] = [R, docId];
+      } else if (R !== Sh) {
+        // Cambió en ambos lados: se juntan y la mezcla se envía en el próximo push
+        const m = mergeUnit(u, cur[u], payload[u]);
+        if (hv(m) !== L) { st = st || { ...getState() }; applyUnit(st, u, m); }
+        if (R === undefined) delete synced[u]; else synced[u] = [R, docId];
+        dirty = true;
       } else dirty = true;
     }
     storeSynced();
@@ -132,8 +159,12 @@
       for (const u of Object.keys(cur)) if (docOf(u, cur[u]) === docId) names.add(u);
       for (const u of names) {
         const L = u in cur ? hv(cur[u]) : undefined;
-        if (L === (synced[u] && synced[u][0])) continue; // sin cambios locales: queda lo de la nube
-        if (L === undefined) delete out[u]; else out[u] = cur[u];
+        const Sh = synced[u] && synced[u][0];
+        if (L === Sh) continue; // sin cambios locales: queda lo de la nube
+        // Si la nube también cambió desde la última sincronización, se juntan ambas versiones
+        const R = u in remote ? hv(remote[u]) : undefined;
+        const v = R !== Sh && R !== L ? mergeUnit(u, cur[u], remote[u]) : cur[u];
+        if (v === undefined) delete out[u]; else out[u] = v;
       }
       tx.set(ref, { data: JSON.stringify(out), ts: Date.now(), dev });
       final = out;
@@ -150,10 +181,10 @@
     const docs = new Set();
     for (const u of Object.keys(cur)) if (hv(cur[u]) !== (synced[u] && synced[u][0])) docs.add(docOf(u, cur[u]));
     for (const u of Object.keys(synced)) if (!(u in cur)) docs.add(synced[u][1]);
-    if (!docs.size) { set({ status: 'Sincronizado ✓' }); return; }
+    if (!docs.size) { set({ status: 'Sincronizado ✓', last: Date.now() }); return; }
     try {
       for (const d of docs) await pushDoc(d, cur);
-      set({ status: 'Sincronizado ✓' });
+      set({ status: 'Sincronizado ✓', last: Date.now() });
     } catch (e) {
       set({ status: 'Sin conexión: se enviará después' });
       clearTimeout(pushTimer); pushTimer = setTimeout(push, 30000);
@@ -218,6 +249,23 @@
       if (dirty) schedulePush();
     }, () => set({ status: 'Sin conexión' })));
   }
+  // Vuelve a leer la nube y envía lo pendiente (al volver a la app o con el botón "Sincronizar ahora").
+  // Cubre los casos en que el aviso en vivo se cortó, por ejemplo con el PC suspendido o el teléfono sin señal.
+  async function refresh() {
+    if (!uid || !fb) return;
+    if (legacy) return pushLegacy();
+    set({ status: 'Sincronizando…' });
+    try {
+      const parts = await fb.getDocs(fb.collection(fb.db, 'users', uid, partsCol()));
+      parts.forEach(d => { try { receive(d.id, JSON.parse(d.data().data)); } catch (e) { /* documento inválido */ } });
+      await push();
+    } catch (e) { set({ status: 'Sin conexión: se enviará después' }); }
+  }
+  let hiddenAt = 0;
+  if (typeof document !== 'undefined') document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') { hiddenAt = Date.now(); if (pushTimer) { clearTimeout(pushTimer); push(); } } // al salir, se envía altiro lo pendiente
+    else if (Date.now() - hiddenAt > 20000) refresh();
+  });
 
   // ---------- Formato antiguo (un solo documento), por si las reglas no permiten la subcolección ----------
   async function pushLegacy() {
@@ -335,7 +383,8 @@
     },
     async signOut() { if (fb) await fb.signOut(fb.auth); },
     ask,
-    _test: { inject: f => { fb = f; }, injectAI: m => { aiMod = m; }, setUser: u => { S.user = u; }, start, push, getSynced: () => synced },
+    syncNow: refresh,
+    _test: { inject: f => { fb = f; }, injectAI: m => { aiMod = m; }, setUser: u => { S.user = u; }, start, push, refresh, getSynced: () => synced },
   };
   init();
 })();
