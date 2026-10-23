@@ -8,7 +8,8 @@
   main.addEventListener('touchstart', e => {
     const dayView = view === 'hoy' || view === 'comidas' || (view === 'rutinas' && ui.rutTab === 'actividad');
     if (!dayView || $('.modal-back')) { x0 = null; return; }
-    if (e.target.closest('input, select, textarea, .scroll-x, .chips, .list.scroll, .act-grid')) { x0 = null; return; }
+    // Deslizar sobre un registro lo borra (ux.js): ahí no se cambia de día
+    if (e.target.closest('input, select, textarea, .scroll-x, .chips, .list.scroll, .act-grid, .item')) { x0 = null; return; }
     x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; t0 = Date.now();
   }, { passive: true });
   main.addEventListener('touchend', e => {

@@ -21,6 +21,18 @@ function scaleFactor(recipe, target) {
   const f = Math.min(2, Math.max(0.5, target / base));
   return Math.round(f * 4) / 4;
 }
+// Cambia una comida del plan por otra receta parecida en calorías (desde el plan o desde "Te toca" en Hoy)
+function swapPlanMeal(di, mealId) {
+  const d = state.plan.days[di];
+  const cur = d.meals[mealId].id;
+  const r0t = state.routine, extra = d.train && r0t ? burnedKcal(r0t.objetivo === 'perder' ? 6 : 5, r0t.minutos) : 0;
+  const target = (calcTargets().kcal + extra) * MEALS.find(m => m.id === mealId).share;
+  const pool = recipesFor(mealId).filter(r => r.id !== cur);
+  if (!pool.length) return toast('No hay otra receta para esa comida');
+  const r = pool.map(r => ({ r, s: recipeScore(r, target) + Math.random() })).sort((a, c) => a.s - c.s)[0].r;
+  d.meals[mealId] = { id: r.id, f: scaleFactor(r, target) };
+  save(); render();
+}
 function recipesFor(mealId) {
   const veg = state.profile.dieta === 'vegetariana';
   return allRecipes().filter(r => (r.tipo === mealId || (mealId === 'cena' && r.tipo === 'almuerzo') || (mealId === 'almuerzo' && r.tipo === 'cena'))
@@ -180,16 +192,17 @@ function recipeListHtml() {
   return `<p class="muted small" style="margin:4px 0 8px">${list.length} recetas${words.length ? ` con ${words.join(', ')}` : ''}</p>
     <div class="rgrid">${list.map(r => recipeCard(r, 1, hits ? `✓ ${hits.get(r.id).length === words.length ? 'Tiene todo lo que buscas' : 'Tiene ' + hits.get(r.id).join(', ')}` : '')).join('') || '<p class="muted">No hay recetas con esos filtros.</p>'}</div>`;
 }
-function viewRecetas() {
-  const head = pageHead('Recetas') + tabs('rec', ui.recipeTab, [['recetas', '🍽️ Qué comer'], ['plan', '🗓️ Plan'], ['compras', '🛒 Compras']]);
-  if (ui.recipeTab === 'plan') return head + viewPlan();
-  if (ui.recipeTab === 'compras') return head + viewCompras();
+// (Se muestra dentro de Comidas → Recetas / Plan / Compras)
+function viewRecetas() { return viewComidas(); }
+function recetasBody() {
+  if (ui.recipeTab === 'plan') return viewPlan();
+  if (ui.recipeTab === 'compras') return viewCompras();
 
   const { meal, target, left } = nextMealTarget();
   const tipos = ['todas', 'desayuno', 'almuerzo', 'cena', 'snack'];
   const tags = ['todas', 'mias', 'alta-proteina', 'vegetariana', 'rapida', 'economica'];
   const sugg = (ui.suggest || []).map(id => allRecipes().find(r => r.id === id)).filter(Boolean);
-  return head + `
+  return `
     <div class="card next-meal">
       <div>
         <div class="muted small">Tu próxima comida · ${MEAL_ICO[meal.id]} ${meal.name.toLowerCase()}</div>
@@ -301,18 +314,7 @@ bind.recetas = () => {
   });
   const gp = $('#genPlan');
   if (gp) gp.addEventListener('click', () => { generatePlan(); save(); render(); toast('Plan semanal listo'); });
-  $$('[data-swap]').forEach(b => b.addEventListener('click', () => {
-    const [di, mealId] = b.dataset.swap.split(':');
-    const d = state.plan.days[Number(di)];
-    const cur = d.meals[mealId].id;
-    const r0t = state.routine, extra = d.train && r0t ? burnedKcal(r0t.objetivo === 'perder' ? 6 : 5, r0t.minutos) : 0;
-    const target = (calcTargets().kcal + extra) * MEALS.find(m => m.id === mealId).share;
-    const pool = recipesFor(mealId).filter(r => r.id !== cur);
-    if (!pool.length) return toast('No hay otra receta para esa comida');
-    const r = pool.map(r => ({ r, s: recipeScore(r, target) + Math.random() })).sort((a, c) => a.s - c.s)[0].r;
-    d.meals[mealId] = { id: r.id, f: scaleFactor(r, target) };
-    save(); render();
-  }));
+  $$('[data-swap]').forEach(b => b.addEventListener('click', () => { const [di, mealId] = b.dataset.swap.split(':'); swapPlanMeal(Number(di), mealId); }));
   $$('[data-check]').forEach(c => c.addEventListener('change', () => {
     state.plan.checked = state.plan.checked || {};
     state.plan.checked[c.dataset.check] = c.checked;

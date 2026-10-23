@@ -75,7 +75,8 @@ test('Comidas: agregar rápido, hoja, registro rápido y alimento propio', async
 });
 
 test('Recetas: agregar, detalle, crear receta, plan y compras', async ({ page }) => {
-  await page.click('[data-view=recetas]');
+  await page.click('[data-view=comidas]');
+  await page.click('[data-tab-com=recetas]');
   const n0 = (await today(page)).foods.length;
   await page.click('.rcard [data-log-recipe]');
   await page.click('[data-open-recipe]');
@@ -87,9 +88,9 @@ test('Recetas: agregar, detalle, crear receta, plan y compras', async ({ page })
   await page.click('[data-pick]');
   await page.click('#rcSave');
   expect((await state(page)).customRecipes).toHaveLength(1);
-  await page.click('[data-tab-rec=plan]');
+  await page.click('[data-tab-com=plan]');
   await page.click('#genPlan');
-  await page.click('[data-tab-rec=compras]');
+  await page.click('[data-tab-com=compras]');
   await expect(page.locator('#shareList')).toBeVisible();
 });
 
@@ -191,8 +192,9 @@ test('Metas inteligentes: carbos en días de entreno, aviso de proteína y plan 
   expect(g[2]).toBe(g[0]);
   await page.click('[data-view=rutinas]');
   await page.click('#genRoutine');
-  await page.click('[data-view=recetas]');
-  await page.click('[data-tab-rec=plan]');
+  await page.click('[data-view=comidas]');
+  await page.click('[data-tab-com=recetas]');
+  await page.click('[data-tab-com=plan]');
   await page.click('#genPlan');
   const plan = (await state(page)).plan;
   expect(plan.days.filter(d => d.train)).toHaveLength(3);
@@ -212,7 +214,8 @@ test('Deshacer, buscar recetas por ingrediente y accesos directos', async ({ pag
   expect((await today(page)).foods.length).toBe(n0 - 1);
   await page.click('.toast-undo');
   expect((await today(page)).foods.length).toBe(n0);
-  await page.click('[data-view=recetas]');
+  await page.click('[data-view=comidas]');
+  await page.click('[data-tab-com=recetas]');
   await page.fill('#recSearch', 'pollo arroz');
   await expect(page.locator('#recSearch')).toBeFocused();
   await expect(page.locator('#recList .rcard').first()).toContainText('Tiene todo');
@@ -443,6 +446,7 @@ test('Entrenamiento: historial, semana de descarga y cronómetro de cardio', asy
 
 test('Varias personas en el mismo teléfono', async ({ page }) => {
   await page.click('#avatarBtn');
+  await page.click('#openProfiles');
   await page.fill('#newProf', 'Sofía');
   await Promise.all([page.waitForEvent('load'), page.click('#addProf')]);
   // Perfil nuevo: empieza vacío, en la bienvenida y con su nombre puesto
@@ -457,6 +461,7 @@ test('Varias personas en el mismo teléfono', async ({ page }) => {
   expect(idx.list.map(p => p.name)).toEqual(['Benja', 'Sofía']);
   // Volver a Benja: sus datos siguen ahí
   await page.click('#avatarBtn');
+  await page.click('#openProfiles');
   await Promise.all([page.waitForEvent('load'), page.click(`[data-switch="p1"]`)]);
   await expect(page.locator('.hello .name')).toHaveText('Benja');
   expect(Object.keys((await state(page)).days).length).toBeGreaterThan(10);
@@ -478,7 +483,7 @@ test('Coach: chat con IA (simulada), contexto sin datos personales y coach bási
       return txt;
     };
   });
-  await page.click('#coachBtn');
+  await page.click('[data-view=coach]');
   await expect(page.locator('.coach-log .msg.model').first()).toContainText('Conozco tus registros');
   await page.click('[data-q=bien]');
   await expect(page.locator('.msg.model').last()).toContainText('¡Bien hecho!');
@@ -621,7 +626,8 @@ test('IA: registrar ejercicio escribiendo, con récord y ejercicio nuevo', async
 
 test('IA: armar una comida con lo que queda y revisión semanal del coach', async ({ page }) => {
   await fakeAI(page);
-  await page.click('[data-view=recetas]');
+  await page.click('[data-view=comidas]');
+  await page.click('[data-tab-com=recetas]');
   await page.click('#aiMeal');
   await page.fill('#amHave', 'pollo y arroz');
   await page.click('[data-am-pref=proteina]');
@@ -1030,4 +1036,138 @@ test('Respaldos: crear, recuperar lo que falta sin borrar y volver exactamente a
   await page.click('#syncBk');
   await expect(page.locator('.bk-item')).toHaveCount(3);
   await expect(page.locator('.bk-item').first()).toContainText('Antes de restaurar');
+});
+
+// Toque simulado (deslizar) con eventos táctiles reales del navegador
+async function swipe(page, selector, dx, dy) {
+  await page.evaluate(([sel, dx, dy]) => {
+    const el = document.querySelector(sel), r = el.getBoundingClientRect();
+    const x = r.left + r.width / 2, y = r.top + 10;
+    const t = (cx, cy) => new Touch({ identifier: 1, target: el, clientX: cx, clientY: cy });
+    el.dispatchEvent(new TouchEvent('touchstart', { bubbles: true, touches: [t(x, y)], changedTouches: [t(x, y)] }));
+    for (let i = 1; i <= 5; i++) el.dispatchEvent(new TouchEvent('touchmove', { bubbles: true, touches: [t(x + dx * i / 5, y + dy * i / 5)], changedTouches: [t(x + dx * i / 5, y + dy * i / 5)] }));
+    el.dispatchEvent(new TouchEvent('touchend', { bubbles: true, touches: [], changedTouches: [t(x + dx, y + dy)] }));
+  }, [selector, dx, dy]);
+}
+
+test('UX: navegación con Comidas (recetas, plan y compras dentro), Coach y Perfil en el avatar', async ({ page }) => {
+  await expect(page.locator('.nav [data-view]')).toHaveText(['Hoy', 'Comidas', 'Entrenar', 'Coach', 'Progreso', 'Perfil']);
+  await page.click('[data-view=comidas]');
+  await expect(page.locator('[data-tab-com]')).toHaveText(['Registrar', 'Recetas', 'Plan', 'Compras']);
+  await page.click('[data-tab-com=recetas]');
+  await expect(page.locator('#recSearch')).toBeVisible();
+  // Los enlaces antiguos a "recetas" llegan a Comidas → Recetas
+  await page.evaluate(() => go('recetas'));
+  await expect(page.locator('[data-tab-com=recetas]')).toHaveClass(/active/);
+  await expect(page.locator('.nav [data-view=comidas]')).toHaveClass(/active/);
+  await page.click('[data-view=coach]');
+  await expect(page.locator('.coach-page #cMsg')).toBeVisible();
+  await expect(page.locator('#fab')).toBeHidden(); // en el chat no tapa el campo de texto
+  await page.click('.page-head [data-go=perfil]');
+  await expect(page.locator('#saveProfile')).toBeVisible();
+});
+
+test('UX: botón ＋ (agua, peso, buscar) y buscador global', async ({ page }) => {
+  const w0 = (await today(page)).water;
+  await page.click('#fab');
+  await expect(page.locator('.qa-tile')).toHaveCount(8);
+  await page.click('[data-qa=agua]');
+  expect((await today(page)).water).toBe(w0 + 1);
+  await page.click('#fab');
+  await page.click('[data-qa=peso]');
+  await page.fill('#wqKg', '79.4');
+  await page.click('#wqSave');
+  expect((await state(page)).weights.at(-1)).toMatchObject({ kg: 79.4 });
+  await page.click('#fab');
+  await page.click('[data-qa=buscar]');
+  await expect(page.locator('#foodSearch')).toBeFocused();
+  // Buscador global: secciones, alimentos y recetas
+  await page.click('[data-view=hoy]');
+  await page.click('#gSearch');
+  await page.fill('#gsQ', 'compras');
+  await page.click('[data-gs-place]');
+  await expect(page.locator('[data-tab-com=compras]')).toHaveClass(/active/);
+  await page.click('[data-view=hoy]');
+  await page.click('#gSearch');
+  await page.fill('#gsQ', 'avena');
+  await expect(page.locator('[data-gs-food]').first()).toBeVisible();
+  await expect(page.locator('[data-gs-rec]').first()).toBeVisible();
+  await page.click('[data-gs-food]');
+  await expect(page.locator('#addFood')).toBeVisible(); // abre la hoja del alimento
+});
+
+test('UX: Hoy con "Te toca", tarjetas personalizables, avisos agrupados y consejo de primer uso', async ({ page }) => {
+  // Primer uso: un consejo que se va con "Entendido" y no vuelve
+  await expect(page.locator('.first-tip')).toContainText('Toca ＋');
+  await page.click('[data-first-ok]');
+  await page.reload();
+  await expect(page.locator('.first-tip')).toHaveCount(0);
+  // Te toca: ✓ Comí esto lo anota en esa comida
+  await expect(page.locator('.toca')).toBeVisible();
+  const name = await page.locator('.toca .toca-main b').textContent();
+  await page.click('.toca [data-toca-swap]');
+  const name2 = await page.locator('.toca .toca-main b').textContent();
+  expect(name2).not.toBe(name);
+  const meal = await page.getAttribute('.toca [data-log-recipe]', 'data-meal');
+  const n0 = (await today(page)).foods.length;
+  await page.click('.toca [data-log-recipe]');
+  const fs = (await today(page)).foods;
+  expect(fs.length).toBeGreaterThan(n0);
+  expect(fs.at(-1).meal).toBe(meal);
+  // Personalizar: ocultar el agua y subir los macros al principio
+  await page.click('#hoyEdit');
+  await page.uncheck('[data-he-on=agua]');
+  for (let i = 0; i < 2; i++) await page.click('.he-row:has([data-he-on=macros]) [data-he-up]');
+  await page.click('#heSave');
+  await expect(page.locator('.water-card')).toHaveCount(0);
+  await expect(page.locator('.hoy-cards > .card').first()).toContainText('Macros del día');
+  await page.click('#hoyEdit');
+  await page.click('#heReset');
+  await expect(page.locator('.water-card')).toHaveCount(1);
+  // Avisos: el primero visible y el resto agrupado
+  await page.evaluate(() => { state.days[todayKey()].water = 0; save(); render(); });
+  const nn = await page.locator('.nudge').count();
+  if (nn > 1) await expect(page.locator('.nudge-more summary')).toContainText('para hoy');
+});
+
+test('UX: Entrenar estilo Hevy: empezar, ✓ por serie con descanso, entrenamiento en curso, repetir e historial', async ({ page }) => {
+  await page.click('[data-view=rutinas]');
+  await expect(page.locator('[data-tab-rut=rutina]')).toHaveText(/Entrenar/);
+  // Historial con el último entrenamiento y su detalle
+  await expect(page.locator('[data-hist]').first()).toBeVisible();
+  await page.click('[data-hist]');
+  await expect(page.locator('.modal')).toContainText('Press de Banca con Barra');
+  await page.click('.modal-x');
+  // Empezar: registro del gym con ✓ por serie
+  await page.click('#startEmpty');
+  await page.fill('#gQ', 'press banca barra');
+  await page.click('[data-gp="bench-press"]');
+  await page.click('#gDone');
+  await page.click('[data-gs-done="0:0"]');
+  await expect(page.locator('.gym-set').nth(1)).toHaveClass(/done/); // nth(0) es el encabezado
+  await expect(page.locator('.gym-rest')).toContainText('Descanso');
+  await expect(page.locator('#gEl')).toBeVisible();
+  // Al cerrar queda la barra "Entrenamiento en curso" para volver
+  await page.click('.modal-x');
+  await expect(page.locator('#wbar')).toBeVisible();
+  await expect(page.locator('#wbar')).toContainText('Entrenamiento en curso');
+  await page.click('#wbar');
+  await expect(page.locator('.gym-set.done')).toHaveCount(1);
+  await page.click('#gSave');
+  await expect(page.locator('#wbar')).toBeHidden();
+  // Repetir el último: carga los mismos ejercicios
+  await page.click('[data-repeat-w]');
+  await expect(page.locator('.gym-ex')).toHaveCount(1);
+  await expect(page.locator('.gym-ex')).toContainText('Press de Banca con Barra');
+});
+
+test('UX: deslizar para borrar un alimento y para cerrar una ventana', async ({ page }) => {
+  const id = await page.getAttribute('[data-edit-food]', 'data-edit-food');
+  await swipe(page, `[data-edit-food="${id}"]`, -160, 0);
+  expect((await today(page)).foods.some(f => f.id === id)).toBe(false);
+  await expect(page.locator('.toast-undo')).toBeVisible();
+  await page.click('#fab');
+  await expect(page.locator('.modal')).toBeVisible();
+  await swipe(page, '.modal h2', 0, 200);
+  await expect(page.locator('.modal')).toHaveCount(0);
 });

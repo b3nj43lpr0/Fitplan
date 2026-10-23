@@ -112,18 +112,22 @@ function coachErrorText(e) {
   if (/permission|403|not been used|disabled|enable|api-not-enabled|billing/i.test(m)) return 'Falta activar la IA en Firebase (AI Logic → Gemini Developer API). Mientras, el coach básico:';
   return 'La IA no respondió. Te dejo el análisis del coach básico:';
 }
-function openCoach() {
-  let log = coachLog();
+// El coach es una pestaña propia (antes era una ventana); openCoach() sigue sirviendo desde otras pantallas
+function openCoach() { go('coach'); }
+function viewCoach() {
+  const log = coachLog();
   const S = window.FitSync && window.FitSync.state;
   const aiReady = !!(S && S.enabled && S.user);
-  openModal(`<div class="coach">
-    <div class="coach-head"><span class="coach-ava">🤖</span><div><h2 style="margin:0">Tu coach</h2><span class="muted small">${aiReady ? 'Con IA (Gemini) · conoce tus registros' : 'Coach básico · inicia sesión en Perfil para usar la IA'}</span></div></div>
+  return pageHead('Coach', aiReady ? '🤖 Con IA · conoce tus comidas, peso y entrenamientos' : '🤖 Coach básico · inicia sesión en Perfil para usar la IA') + `<div class="coach coach-page">
     <div class="coach-log" id="cLog"></div>
     <div class="chips scroll-x coach-quick">${QUICK_Q.map(([id, q]) => `<button class="chip" data-q="${id}">${esc(q)}</button>`).join('')}</div>
     <form class="coach-input" id="cForm"><input id="cMsg" placeholder="Pregúntale algo…" autocomplete="off"><button class="btn" aria-label="Enviar">➤</button></form>
     <div class="coach-foot"><span class="muted small">Tus números van resumidos a Google, sin nombre ni correo. No reemplaza a un profesional de salud.</span>${log.length ? '<button class="see" id="cClear">Borrar chat</button>' : ''}</div>
-  </div>`, m => {
-    m.querySelector('.modal').classList.add('coach-modal');
+  </div>`;
+}
+bind.coach = () => {
+  const m = $('#main');
+  let log = coachLog();
     const box = m.querySelector('#cLog');
     const bubble = (role, html) => `<div class="msg ${role}">${html}</div>`;
     const paint = () => {
@@ -177,5 +181,4 @@ function openCoach() {
     });
     const cl = m.querySelector('#cClear');
     if (cl) cl.addEventListener('click', () => { log = []; storeCoach(log); paint(); cl.remove(); });
-  });
-}
+};

@@ -47,19 +47,27 @@ const DIETS = {
 const EMPTY = () => ({ profile: null, days: {}, customFoods: [], routine: null, weights: [], measures: [], plan: null, ajuste: 0, lastAdjust: null, favFoods: [], workouts: [], customRecipes: [], badges: [], customExercises: [], challenges: [], dietBreak: null, weeklySeen: null, combos: [], fasting: null });
 
 // ---------- Tema (se guarda por dispositivo) ----------
+// Íconos de línea para los botones (mismo estilo que la barra de navegación)
+const svgIco = d => `<svg class="lico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+const ICON = {
+  gear: svgIco('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>'),
+  search: svgIco('<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>'),
+  chat: svgIco('<path d="M21 12a8 8 0 0 1-11.6 7.1L4 20.5l1.4-4.9A8 8 0 1 1 21 12z"/><path d="M8.5 12h.01M12 12h.01M15.5 12h.01" stroke-width="3"/>'),
+};
 const THEME_KEY = 'fitplan-theme';
-const ACCENTS = { violeta: ['#6a1bf5', '#8f5bff', '#8a55ff', '#a77dff'], azul: ['#1d6ff2', '#4b8ef7', '#4d8ff7', '#79acff'], verde: ['#0f9d6c', '#2fbf8a', '#2fc28c', '#5ad8a8'], naranja: ['#e85d04', '#f48c2b', '#f7862c', '#ffa65c'], rosa: ['#d6246e', '#ec4f8f', '#ee5b97', '#ff86b5'] };
-function themePrefs() { try { return { mode: 'auto', accent: 'violeta', ...JSON.parse(localStorage.getItem(THEME_KEY)) }; } catch (e) { return { mode: 'auto', accent: 'violeta' }; } }
+// [claro, claro 2, oscuro, oscuro 2]. Azul es el de por defecto (estilo inspirado en Hevy)
+const ACCENTS = { azul: ['#2f7cf6', '#5a9bff', '#3d8bff', '#6ea8ff'], violeta: ['#6a1bf5', '#8f5bff', '#8a55ff', '#a77dff'], verde: ['#0f9d6c', '#2fbf8a', '#2fc28c', '#5ad8a8'], naranja: ['#e85d04', '#f48c2b', '#f7862c', '#ffa65c'], rosa: ['#d6246e', '#ec4f8f', '#ee5b97', '#ff86b5'] };
+function themePrefs() { try { return { mode: 'auto', accent: 'azul', ...JSON.parse(localStorage.getItem(THEME_KEY)) }; } catch (e) { return { mode: 'auto', accent: 'azul' }; } }
 function applyTheme() {
   const t = themePrefs();
   const root = document.documentElement;
   if (t.mode === 'auto') delete root.dataset.theme; else root.dataset.theme = t.mode;
   const dark = t.mode === 'dark' || (t.mode === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
-  const a = ACCENTS[t.accent] || ACCENTS.violeta;
+  const a = ACCENTS[t.accent] || ACCENTS.azul;
   root.style.setProperty('--accent', dark ? a[2] : a[0]);
   root.style.setProperty('--accent-2', dark ? a[3] : a[1]);
-  root.style.setProperty('--accent-soft', `color-mix(in srgb, ${dark ? a[2] : a[0]} ${dark ? 22 : 12}%, ${dark ? '#17171d' : '#fff'})`);
-  root.style.setProperty('--lavender', `color-mix(in srgb, ${dark ? a[2] : a[0]} ${dark ? 35 : 22}%, ${dark ? '#17171d' : '#fff'})`);
+  root.style.setProperty('--accent-soft', `color-mix(in srgb, ${dark ? a[2] : a[0]} ${dark ? 20 : 10}%, ${dark ? '#161619' : '#fff'})`);
+  root.style.setProperty('--lavender', `color-mix(in srgb, ${dark ? a[2] : a[0]} ${dark ? 32 : 18}%, ${dark ? '#161619' : '#fff'})`);
   const meta = document.querySelector('meta[name=theme-color]');
   if (meta) meta.content = a[0];
 }
@@ -580,18 +588,22 @@ function bodyFat(m, p) {
 }
 
 // ---------- Navegación ----------
-$$('.nav button').forEach(b => b.addEventListener('click', () => go(b.dataset.view)));
+// Tocar "Comidas" en la barra o en un botón lleva a registrar (las otras secciones se eligen arriba)
+$$('.nav button').forEach(b => b.addEventListener('click', () => { if (b.dataset.view === 'comidas' && view !== 'comidas') ui.comTab = 'registrar'; go(b.dataset.view); }));
 // Cualquier botón con data-go navega (delegado: sirve para todas las vistas y modales)
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-go]');
-  if (b) { e.preventDefault(); closeModal(); go(b.dataset.go); }
+  if (b) { e.preventDefault(); closeModal(); if (b.dataset.go === 'comidas') ui.comTab = 'registrar'; go(b.dataset.go); }
 });
 // Encabezado común de cada sección, con acceso a Perfil
+// Encabezado común: título y, a la derecha, tu inicial (toca para ir a Perfil, igual en todas las pantallas)
 function pageHead(title, sub = '') {
-  return `<div class="page-head"><div><h1>${title}</h1>${sub ? `<p class="sub">${sub}</p>` : ''}</div><button class="round-btn" data-go="perfil" aria-label="Perfil y ajustes">⚙️</button></div>`;
+  return `<div class="page-head"><div><h1>${title}</h1>${sub ? `<p class="sub">${sub}</p>` : ''}</div><button class="avatar sm" data-go="perfil" aria-label="Perfil y ajustes" title="Perfil y ajustes">${state.profile ? initial(state.profile.nombre) : ICON.gear}</button></div>`;
 }
 function go(v) {
   if (v === 'ejercicio') { ui.rutTab = 'actividad'; v = 'rutinas'; }
+  // Recetas, Plan y Compras viven dentro de Comidas
+  if (v === 'recetas') { ui.comTab = ['plan', 'compras'].includes(ui.recipeTab) ? ui.recipeTab : 'recetas'; v = 'comidas'; }
   view = v;
   render();
   window.scrollTo(0, 0);
@@ -624,7 +636,8 @@ function confetti(n = 60) {
 }
 const tap = () => { if (navigator.vibrate) navigator.vibrate(12); };
 function render() {
-  const views = { hoy: viewHoy, comidas: viewComidas, ejercicio: viewEjercicio, recetas: viewRecetas, rutinas: viewRutinas, progreso: viewProgreso, perfil: viewPerfil };
+  const views = { hoy: viewHoy, comidas: viewComidas, ejercicio: viewEjercicio, recetas: viewRecetas, rutinas: viewRutinas, progreso: viewProgreso, perfil: viewPerfil, coach: viewCoach };
+  if (view === 'recetas') { ui.comTab = ['plan', 'compras'].includes(ui.recipeTab) ? ui.recipeTab : 'recetas'; view = 'comidas'; }
   if (!state.profile && view !== 'perfil') view = 'perfil';
   if (EX_VIEWS.includes(view) && !(view === 'rutinas' && ui.rutTab === 'actividad') && !exReady()) {
     $('#main').innerHTML = '<div class="loading"><div class="spinner"></div><p class="muted">Cargando ejercicios…</p></div>';
@@ -637,6 +650,8 @@ function render() {
   $('#main').innerHTML = views[view]();
   $$('.nav button').forEach(b => b.classList.toggle('active', b.dataset.view === view));
   bind[view] && bind[view]();
+  if (typeof firstTip === 'function') firstTip(view);
+  document.body.dataset.view = view;
 }
 function dateBar() {
   const today = todayKey();

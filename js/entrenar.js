@@ -217,8 +217,58 @@ async function paintOffline() {
   });
 }
 function viewRutinas() {
-  const head = pageHead('Entrenar') + tabs('rut', ui.rutTab, [['rutina', '🏋️ Mi rutina'], ['actividad', '🔥 Actividad'], ['biblioteca', '📚 Ejercicios']]);
-  return head + (ui.rutTab === 'biblioteca' ? viewBiblioteca() : ui.rutTab === 'actividad' ? viewEjercicio() : viewMiRutina());
+  const head = pageHead('Entrenar') + tabs('rut', ui.rutTab, [['rutina', '🏋️ Entrenar'], ['actividad', '🔥 Actividad'], ['biblioteca', '📚 Ejercicios']]);
+  return head + (ui.rutTab === 'biblioteca' ? viewBiblioteca() : ui.rutTab === 'actividad' ? viewEjercicio() : trainHome() + viewMiRutina() + trainHistory());
+}
+// ---------- Inicio de Entrenar (estilo Hevy): empezar, repetir el último e historial ----------
+const GENERIC_W = ['Gimnasio', 'Pesas', 'Entrenamiento registrado'];
+const workoutName = w => (GENERIC_W.includes(w.name) ? w.ex.slice(0, 2).map(x => (exById(x.id) || { n: 'Ejercicio' }).n).join(' + ') + (w.ex.length > 2 ? ` y ${w.ex.length - 2} más` : '') : w.name);
+const workoutVol = w => w.ex.reduce((a, x) => a + x.sets.reduce((b, z) => b + z.kg * z.reps, 0), 0);
+const daysAgo = k => { const n = daysBetween(k, todayKey()); return n === 0 ? 'hoy' : n === 1 ? 'ayer' : `hace ${n} días`; };
+const sortedWorkouts = () => [...state.workouts].sort((a, b) => (a.d < b.d ? 1 : a.d > b.d ? -1 : 0));
+function trainHome() {
+  const last = sortedWorkouts()[0];
+  return `<div class="card train-home">
+    <button class="btn start-empty" id="startEmpty">▶ Empezar entrenamiento</button>
+    <p class="muted small" style="margin:8px 0 0">Elige ejercicios y anota tus series. Si sigues una rutina, la tienes más abajo.</p>
+    ${last ? `<div class="item repeat-last"><span class="fi sm">↺</span><div class="info"><div class="name">Repetir: ${esc(workoutName(last))}</div><div class="muted small">${daysAgo(last.d)} · ${last.ex.length} ${last.ex.length === 1 ? 'ejercicio' : 'ejercicios'} · ${r0(workoutVol(last))} kg</div></div><button class="btn ghost sm" data-repeat-w="${last.id}">Repetir</button></div>` : ''}
+  </div>`;
+}
+function trainHistory() {
+  const list = sortedWorkouts().slice(0, ui.histN || 6);
+  if (!list.length) return '';
+  const prs = new Set(strengthStats().flatMap(x => x.prs.map(p => p.d + x.id)));
+  return `<div class="card"><div class="row"><h2>Historial</h2><button class="see" data-go="progreso">Fuerza y récords ›</button></div>
+    <div class="list">${list.map(w => { const n = w.ex.filter(x => prs.has(w.d + x.id)).length; return `<div class="item tappable" data-hist="${w.id}" role="button" tabindex="0">
+      <div class="info"><div class="name">${esc(workoutName(w))}</div><div class="muted small">${shortDate(w.d)} · ${w.minutes} min · ${r0(workoutVol(w))} kg${n ? ` · <b style="color:var(--good)">🏆 ${n} ${n === 1 ? 'récord' : 'récords'}</b>` : ''}</div></div><span class="muted">›</span></div>`; }).join('')}</div>
+    ${state.workouts.length > list.length ? '<button class="see" id="histMore">Ver más</button>' : ''}</div>`;
+}
+// Repetir un entrenamiento: mismos ejercicios, con el peso sugerido para hoy
+function repeatWorkout(id) {
+  const w = state.workouts.find(x => x.id === id);
+  if (!w) return;
+  const g = gymDraft();
+  const draft = g && !g.wid && g.date === todayKey() ? g : { date: todayKey(), items: [], minutes: null, inten: 'normal' };
+  for (const x of w.ex) {
+    if (draft.items.some(y => y.id === x.id)) continue;
+    const nt = nextTarget(x.id);
+    draft.items.push({ id: x.id, sets: nt ? Array.from({ length: nt.sets }, () => ({ kg: nt.kg || '', reps: nt.reps })) : x.sets.map(z => ({ kg: z.kg, reps: z.reps })) });
+  }
+  storeGymDraft(draft); closeModal(); currentDate = todayKey(); openGymLog();
+}
+function openHistory(id) {
+  const w = state.workouts.find(x => x.id === id);
+  if (!w) return;
+  const editable = Object.values(state.days).some(dd => dd.exercises.some(e => e.wid === id));
+  openModal(`<h2 style="padding-right:30px">${esc(workoutName(w))}</h2>
+    <p class="muted small" style="margin-top:-6px">${prettyDate(w.d)} · ${w.minutes} min · ${r0(workoutVol(w))} kg de volumen${w.deload ? ' · descarga' : ''}</p>
+    ${w.ex.map(x => { const e = exById(x.id) || { n: 'Ejercicio', img: [] }; return `<div class="gym-ex"><div class="gym-ex-h">${exThumb(e)}<div class="info"><b>${esc(e.n)}</b></div></div>
+      ${x.sets.map((z, k) => `<div class="hist-set"><span class="n">${k + 1}</span><span>${z.kg ? z.kg + ' kg × ' : ''}${z.reps}</span>${z.kg ? `<span class="muted small">1RM ≈ ${r0(e1rm(z))} kg</span>` : ''}</div>`).join('')}</div>`; }).join('')}
+    <div class="btn-row two" style="margin-top:12px"><button class="btn" id="hRepeat">↺ Repetir hoy</button>${editable ? '<button class="btn ghost" id="hEdit">✏️ Editar</button>' : ''}</div>`, m => {
+    m.querySelector('#hRepeat').addEventListener('click', () => repeatWorkout(id));
+    const ed = m.querySelector('#hEdit');
+    if (ed) ed.addEventListener('click', () => { closeModal(); openGymLog(id); });
+  });
 }
 function viewMiRutina() {
   let r = state.routine;
@@ -236,7 +286,7 @@ function viewMiRutina() {
     <div class="field"><label for="rProg">Tipo de rutina</label><select id="rProg">${Object.entries(PROGRAMS).map(([k, x]) => `<option value="${k}" ${k === (o.programa || 'auto') ? 'selected' : ''}>${x.label}${x.gym ? ' · solo gimnasio' : ''}</option>`).join('')}</select></div>
     <div class="field"><label for="rEq">Dónde entrenas</label><select id="rEq">${Object.entries(EQUIP_OPTS).map(([k, l]) => `<option value="${k}" ${o.equipo === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
     <button class="btn" id="genRoutine" style="width:100%">${r ? '🔄 Generar nueva rutina' : '✨ Generar mi rutina'}</button>`;
-  if (!r) return `<div class="card"><h2>Arma tu rutina semanal</h2><p class="muted small" style="margin-top:-6px">Elige cómo entrenas y te armo los días con ejercicios, series y descansos.</p>${cfg}</div>${quickCard()}`;
+  if (!r) return `<div class="card"><h2>Mi rutina · arma tu semana</h2><p class="muted small" style="margin-top:-6px">Elige cómo entrenas y te armo los días con ejercicios, series y descansos.</p>${cfg}</div>${quickCard()}`;
   const done = r.days.filter(x => x.done).length;
   const next = r.days.findIndex(x => !x.done);
   const open = ui.openDay === undefined ? next : ui.openDay;
@@ -245,7 +295,7 @@ function viewMiRutina() {
     <div class="card week-card">
       <div class="week-top"><div><div class="muted small">${(PROGRAMS[r.programa] || PROGRAMS.auto).label} · ${EQUIP_OPTS[r.equipo]} · ≈ ${r0(kcalSesion)} kcal por sesión</div>
         <b class="wk-title">Semana ${r.week || 1}: ${done} de ${r.days.length} entrenamientos</b></div>
-        <button class="round-btn" id="cfgToggle" aria-label="Ajustar rutina" aria-expanded="${!!ui.rutCfg}">⚙️</button></div>
+        <button class="round-btn" id="cfgToggle" aria-label="Ajustar rutina" aria-expanded="${!!ui.rutCfg}">${ICON.gear}</button></div>
       <div class="week-dots">${r.days.map((x, i) => `<span class="${x.done ? 'on' : i === next ? 'next' : ''}"></span>`).join('')}</div>
       ${offlineOk() ? '<div id="offlineBox" class="offline-box"></div>' : ''}
       ${r.deload ? '<div class="warn-box info">🧘 <b>Semana de descarga.</b> Tras 4 semanas de carga, esta semana haces menos series y un poco menos de peso: así el cuerpo se recupera y después vuelves más fuerte. <button class="see" id="skipDeload">Saltarla</button></div>'
@@ -341,6 +391,12 @@ function openExercise(id, slot) {
 bind.rutinas = () => {
   $$('[data-tab-rut]').forEach(b => b.addEventListener('click', () => { ui.rutTab = b.dataset.tabRut; render(); animateEnter(); }));
   if (ui.rutTab === 'actividad') return bind.ejercicio();
+  const se = $('#startEmpty');
+  if (se) se.addEventListener('click', () => { currentDate = todayKey(); openGymLog(); });
+  $$('[data-repeat-w]').forEach(b => b.addEventListener('click', () => repeatWorkout(b.dataset.repeatW)));
+  $$('[data-hist]').forEach(el => { el.addEventListener('click', () => openHistory(el.dataset.hist)); el.addEventListener('keydown', ev => { if (ev.key === 'Enter') openHistory(el.dataset.hist); }); });
+  const hm = $('#histMore');
+  if (hm) hm.addEventListener('click', () => { ui.histN = (ui.histN || 6) + 10; render(); });
   $$('[data-ex]').forEach(el => {
     const open = () => openExercise(el.dataset.ex, el.dataset.slot);
     el.addEventListener('click', open);
@@ -519,7 +575,8 @@ function beep() {
 function startWorkout(dayIdx, quick) {
   if (!exReady()) { loadExercises().then(() => startWorkout(dayIdx, quick)); return; }
   let ses = activeSession();
-  const same = ses && !quick && ses.dayIdx === dayIdx && !ses.day;
+  // Misma sesión: el mismo día de la rutina, o el mismo entrenamiento suelto (para retomarlo desde la barra "en curso")
+  const same = ses && (quick ? !!ses.day && ses.day.name === quick.name : ses.dayIdx === dayIdx && !ses.day);
   if (ses && !same && !confirm('Tienes otro entrenamiento sin terminar. ¿Descartarlo y empezar este?')) return;
   if (!same) {
     const dd = quick || state.routine.days[dayIdx];
@@ -575,9 +632,10 @@ function startWorkout(dayIdx, quick) {
         ${resting ? `<div class="rest-box"><div class="muted small">Descanso</div><div class="rest-t" id="restT"></div>
           <div class="btn-row" style="justify-content:center"><button class="btn ghost sm" id="rPlus">+15 s</button><button class="btn sm" id="rSkip">Saltar</button></div></div>` : ''}
         <div class="sets">
-          <div class="set head"><span>Serie</span><span>kg</span><span>Reps</span><span></span></div>
+          <div class="set head"><span>Serie</span><span>Anterior</span><span>kg</span><span>Reps</span><span>✓</span></div>
           ${sets.map((z, k) => `<div class="set ${z.done ? 'done' : ''}">
             <span class="n">${k + 1}</span>
+            <span class="prev">${last && last[k] ? (last[k].kg ? last[k].kg + ' × ' : '') + last[k].reps : '—'}</span>
             <input type="number" inputmode="decimal" min="0" step="0.5" data-kg="${k}" value="${z.kg}" placeholder="—">
             <input type="number" inputmode="numeric" min="0" data-reps="${k}" value="${z.reps}">
             <button class="check-btn ${z.done ? 'on' : ''}" data-set="${k}" aria-label="Serie ${k + 1} hecha">✓</button>
