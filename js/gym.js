@@ -200,10 +200,11 @@ function openGymLog(wid) {
           return `<div class="gym-ex">
             <div class="gym-ex-h">${exThumb(e)}<div class="info"><b>${esc(e.n)}</b><span class="muted small">${esc(e.m.slice(0, 2).join(', '))}${l ? ` · última vez ${shortDate(l.d)}: ${fmtSets(l.sets)}` : ''}</span><span data-gx-pr="${i}">${prTag(x)}</span></div><button class="icon-btn" data-gx-del="${i}" aria-label="Quitar ejercicio">✕</button></div>
             ${(() => { const nt = !d.wid && nextTarget(x.id); return nt ? `<div class="gym-tip"><span>💡 Hoy: <b>${nt.kg ? nt.kg + ' kg × ' : ''}${nt.reps}</b> <span class="muted small">· ${esc(nt.why)}</span></span><button class="btn sm ghost" data-gx-tip="${i}">Usar</button></div>` : ''; })()}
-            ${x.sets.map((z, k) => `<div class="gym-set"><span class="muted small">${k + 1}</span>
-              <div class="field"><input type="number" min="0" step="0.5" inputmode="decimal" value="${z.kg}" placeholder="0" data-gs-kg="${i}:${k}" aria-label="Kilos serie ${k + 1}"><span class="unit-in">kg</span></div>
-              <span class="muted">×</span>
-              <div class="field"><input type="number" min="0" inputmode="numeric" value="${z.reps}" placeholder="0" data-gs-reps="${i}:${k}" aria-label="Repeticiones serie ${k + 1}"><span class="unit-in">reps</span></div>
+            ${x.sets.length ? '<div class="gym-set head"><span>Serie</span><span>Anterior</span><span>kg</span><span>Reps</span><span></span></div>' : ''}
+            ${x.sets.map((z, k) => `<div class="gym-set"><span class="n">${k + 1}</span>
+              <span class="prev">${l && l.sets[k] ? (l.sets[k].kg ? l.sets[k].kg + ' × ' : '') + l.sets[k].reps : '—'}</span>
+              <input type="number" min="0" step="0.5" inputmode="decimal" value="${z.kg}" placeholder="0" data-gs-kg="${i}:${k}" aria-label="Kilos serie ${k + 1}">
+              <input type="number" min="0" inputmode="numeric" value="${z.reps}" placeholder="0" data-gs-reps="${i}:${k}" aria-label="Repeticiones serie ${k + 1}">
               <button class="icon-btn" data-gs-del="${i}:${k}" aria-label="Quitar serie">−</button></div>`).join('')}
             <button class="see" data-gs-add="${i}">＋ Serie</button>
           </div>`;

@@ -18,15 +18,15 @@ function weightChart(ws) {
   const line = avg.map(a => `${x(a.d)},${y(a.kg)}`).join(' ');
   const area = `${x(avg[0].d)},${H - 30} ${line} ${x(avg[avg.length - 1].d)},${H - 30}`;
   return `<svg viewBox="0 0 ${W} ${H}" class="wchart" role="img" aria-label="Gráfico de peso">
-    <defs><linearGradient id="wg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--accent)" stop-opacity=".55"/><stop offset="1" stop-color="var(--accent)" stop-opacity="0"/></linearGradient></defs>
-    ${ticks.map(t => `<line x1="${P}" x2="${W - 10}" y1="${y(t)}" y2="${y(t)}" stroke="rgba(255,255,255,.08)"/><text x="${P - 6}" y="${y(t) + 4}" text-anchor="end" class="axis">${r1(t)}</text>`).join('')}
+    <defs><linearGradient id="wg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--accent)" stop-opacity=".3"/><stop offset="1" stop-color="var(--accent)" stop-opacity="0"/></linearGradient></defs>
+    ${ticks.map(t => `<line x1="${P}" x2="${W - 10}" y1="${y(t)}" y2="${y(t)}" stroke="var(--line)"/><text x="${P - 6}" y="${y(t) + 4}" text-anchor="end" class="axis">${r1(t)}</text>`).join('')}
     <polygon fill="url(#wg)" points="${area}"/>
     <polyline fill="none" stroke="var(--accent-2)" stroke-width="3" stroke-linejoin="round" stroke-linecap="round" points="${line}"/>
-    ${ws.map(w => `<circle cx="${x(w.d)}" cy="${y(w.kg)}" r="3" fill="rgba(255,255,255,.55)"><title>${shortDate(w.d)}: ${w.kg} kg</title></circle>`).join('')}
-    <line x1="${x(last.d)}" x2="${x(last.d)}" y1="10" y2="${H - 30}" stroke="rgba(255,255,255,.25)" stroke-dasharray="4 4"/>
-    <circle cx="${x(last.d)}" cy="${y(last.kg)}" r="7" fill="#fff" stroke="var(--accent)" stroke-width="4"/>
+    ${ws.map(w => `<circle cx="${x(w.d)}" cy="${y(w.kg)}" r="3" fill="var(--muted)" opacity=".6"><title>${shortDate(w.d)}: ${w.kg} kg</title></circle>`).join('')}
+    <line x1="${x(last.d)}" x2="${x(last.d)}" y1="10" y2="${H - 30}" stroke="var(--line)" stroke-dasharray="4 4"/>
+    <circle cx="${x(last.d)}" cy="${y(last.kg)}" r="7" fill="var(--card)" stroke="var(--accent)" stroke-width="4"/>
     <text x="${P}" y="${H - 6}" class="axis">${shortDate(first)}</text><text x="${W - 10}" y="${H - 6}" text-anchor="end" class="axis">${shortDate(last.d)}</text>
-  </svg><div class="muted small">Puntos = cada pesaje · Línea violeta = promedio de 7 días (más confiable que un día suelto).</div>`;
+  </svg><div class="muted small">Puntos = cada pesaje · Línea de color = promedio de 7 días (más confiable que un día suelto).</div>`;
 }
 // Por ejercicio: sesiones, mejor 1RM, peso máximo, más repeticiones, mejor volumen y cada vez que rompiste tu récord
 // ---------- Gasto real (TDEE adaptativo) ----------

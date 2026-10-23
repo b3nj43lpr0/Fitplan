@@ -47,19 +47,26 @@ const DIETS = {
 const EMPTY = () => ({ profile: null, days: {}, customFoods: [], routine: null, weights: [], measures: [], plan: null, ajuste: 0, lastAdjust: null, favFoods: [], workouts: [], customRecipes: [], badges: [], customExercises: [], challenges: [], dietBreak: null, weeklySeen: null, combos: [], fasting: null });
 
 // ---------- Tema (se guarda por dispositivo) ----------
+// Íconos de línea para los botones (mismo estilo que la barra de navegación)
+const svgIco = d => `<svg class="lico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+const ICON = {
+  gear: svgIco('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>'),
+  chat: svgIco('<path d="M21 12a8 8 0 0 1-11.6 7.1L4 20.5l1.4-4.9A8 8 0 1 1 21 12z"/><path d="M8.5 12h.01M12 12h.01M15.5 12h.01" stroke-width="3"/>'),
+};
 const THEME_KEY = 'fitplan-theme';
-const ACCENTS = { violeta: ['#6a1bf5', '#8f5bff', '#8a55ff', '#a77dff'], azul: ['#1d6ff2', '#4b8ef7', '#4d8ff7', '#79acff'], verde: ['#0f9d6c', '#2fbf8a', '#2fc28c', '#5ad8a8'], naranja: ['#e85d04', '#f48c2b', '#f7862c', '#ffa65c'], rosa: ['#d6246e', '#ec4f8f', '#ee5b97', '#ff86b5'] };
-function themePrefs() { try { return { mode: 'auto', accent: 'violeta', ...JSON.parse(localStorage.getItem(THEME_KEY)) }; } catch (e) { return { mode: 'auto', accent: 'violeta' }; } }
+// [claro, claro 2, oscuro, oscuro 2]. Azul es el de por defecto (estilo inspirado en Hevy)
+const ACCENTS = { azul: ['#2f7cf6', '#5a9bff', '#3d8bff', '#6ea8ff'], violeta: ['#6a1bf5', '#8f5bff', '#8a55ff', '#a77dff'], verde: ['#0f9d6c', '#2fbf8a', '#2fc28c', '#5ad8a8'], naranja: ['#e85d04', '#f48c2b', '#f7862c', '#ffa65c'], rosa: ['#d6246e', '#ec4f8f', '#ee5b97', '#ff86b5'] };
+function themePrefs() { try { return { mode: 'auto', accent: 'azul', ...JSON.parse(localStorage.getItem(THEME_KEY)) }; } catch (e) { return { mode: 'auto', accent: 'azul' }; } }
 function applyTheme() {
   const t = themePrefs();
   const root = document.documentElement;
   if (t.mode === 'auto') delete root.dataset.theme; else root.dataset.theme = t.mode;
   const dark = t.mode === 'dark' || (t.mode === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
-  const a = ACCENTS[t.accent] || ACCENTS.violeta;
+  const a = ACCENTS[t.accent] || ACCENTS.azul;
   root.style.setProperty('--accent', dark ? a[2] : a[0]);
   root.style.setProperty('--accent-2', dark ? a[3] : a[1]);
-  root.style.setProperty('--accent-soft', `color-mix(in srgb, ${dark ? a[2] : a[0]} ${dark ? 22 : 12}%, ${dark ? '#17171d' : '#fff'})`);
-  root.style.setProperty('--lavender', `color-mix(in srgb, ${dark ? a[2] : a[0]} ${dark ? 35 : 22}%, ${dark ? '#17171d' : '#fff'})`);
+  root.style.setProperty('--accent-soft', `color-mix(in srgb, ${dark ? a[2] : a[0]} ${dark ? 20 : 10}%, ${dark ? '#161619' : '#fff'})`);
+  root.style.setProperty('--lavender', `color-mix(in srgb, ${dark ? a[2] : a[0]} ${dark ? 32 : 18}%, ${dark ? '#161619' : '#fff'})`);
   const meta = document.querySelector('meta[name=theme-color]');
   if (meta) meta.content = a[0];
 }
@@ -588,7 +595,7 @@ document.addEventListener('click', e => {
 });
 // Encabezado común de cada sección, con acceso a Perfil
 function pageHead(title, sub = '') {
-  return `<div class="page-head"><div><h1>${title}</h1>${sub ? `<p class="sub">${sub}</p>` : ''}</div><button class="round-btn" data-go="perfil" aria-label="Perfil y ajustes">⚙️</button></div>`;
+  return `<div class="page-head"><div><h1>${title}</h1>${sub ? `<p class="sub">${sub}</p>` : ''}</div><button class="round-btn" data-go="perfil" aria-label="Perfil y ajustes">${ICON.gear}</button></div>`;
 }
 function go(v) {
   if (v === 'ejercicio') { ui.rutTab = 'actividad'; v = 'rutinas'; }

@@ -274,18 +274,19 @@ function viewHoy() {
     <div class="hello">
       <button class="avatar" id="avatarBtn" aria-label="Cambiar de persona" title="Cambiar de persona">${initial(state.profile.nombre)}</button>
       <div class="who"><div class="greet">${greeting()} 👋</div><div class="name">${esc(state.profile.nombre || 'Hola')}</div></div>
-      <button class="round-btn coach-btn" id="coachBtn" aria-label="Hablar con tu coach" title="Tu coach">💬</button>
+      <button class="round-btn coach-btn" id="coachBtn" aria-label="Hablar con tu coach" title="Tu coach">${ICON.chat}</button>
       ${streak() ? `<button class="streak" data-go="progreso" title="Días seguidos registrando">🔥 ${streak()}</button>` : ''}
-      <button class="round-btn" data-go="perfil" aria-label="Perfil">⚙️</button>
+      <button class="round-btn" data-go="perfil" aria-label="Perfil">${ICON.gear}</button>
     </div>
     ${dateBar()}
     ${nudges(d, tg).map(n => `<div class="nudge"><span class="ni">${n.ico}</span><span class="nt">${esc(n.txt)}</span><button class="btn sm" data-nudge="${n.act}">${n.btn}</button><button class="icon-btn" data-dismiss="${n.id}" aria-label="Ocultar">✕</button></div>`).join('')}
     <div class="hero">
-      <div class="ring">${ring(t.kcal, budget, over ? 'var(--danger)' : 'var(--accent-2)', 150, 14, 'rgba(255,255,255,.12)')}
-        <div class="center"><span class="big" data-count="${budget > 0 ? Math.round(Math.min(999, t.kcal / budget * 100)) : 0}" data-suffix="%">${budget > 0 ? Math.round(Math.min(999, t.kcal / budget * 100)) : 0}%</span><span class="muted small">consumido</span></div>
+      <div class="ring">${ring(t.kcal, budget, over ? 'var(--danger)' : 'var(--accent)', 150, 12, 'var(--soft)')}
+        <div class="center"><span class="big" data-count="${r0(Math.abs(left))}">${r0(Math.abs(left))}</span><span class="muted small">${over ? 'kcal de más' : 'kcal restantes'}</span></div>
       </div>
       <div class="hero-text">
-        <div class="hero-title">${over ? `Te pasaste por ${r0(-left)} kcal` : `Te quedan ${r0(left)} kcal`}</div>
+        <div class="hero-title">${over ? `Te pasaste por ${r0(-left)} kcal` : `Comiste ${r0(t.kcal)} de ${r0(budget)} kcal`}</div>
+        <div class="bar hero-bar"><span style="width:${budget > 0 ? Math.min(100, t.kcal / budget * 100) : 0}%;background:${over ? 'var(--danger)' : 'var(--accent)'}"></span></div>
         <div class="hero-sub">${currentDate === todayKey() ? 'Hoy' : esc(prettyDate(currentDate))} · meta ${r0(tg.kcal)} kcal${t.burned ? ` + ${r0(t.burned)} de ejercicio` : ''}</div>
         <div class="hero-stats">
           <div><b>${r0(t.kcal)}</b><span>consumidas</span></div>

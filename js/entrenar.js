@@ -245,7 +245,7 @@ function viewMiRutina() {
     <div class="card week-card">
       <div class="week-top"><div><div class="muted small">${(PROGRAMS[r.programa] || PROGRAMS.auto).label} · ${EQUIP_OPTS[r.equipo]} · ≈ ${r0(kcalSesion)} kcal por sesión</div>
         <b class="wk-title">Semana ${r.week || 1}: ${done} de ${r.days.length} entrenamientos</b></div>
-        <button class="round-btn" id="cfgToggle" aria-label="Ajustar rutina" aria-expanded="${!!ui.rutCfg}">⚙️</button></div>
+        <button class="round-btn" id="cfgToggle" aria-label="Ajustar rutina" aria-expanded="${!!ui.rutCfg}">${ICON.gear}</button></div>
       <div class="week-dots">${r.days.map((x, i) => `<span class="${x.done ? 'on' : i === next ? 'next' : ''}"></span>`).join('')}</div>
       ${offlineOk() ? '<div id="offlineBox" class="offline-box"></div>' : ''}
       ${r.deload ? '<div class="warn-box info">🧘 <b>Semana de descarga.</b> Tras 4 semanas de carga, esta semana haces menos series y un poco menos de peso: así el cuerpo se recupera y después vuelves más fuerte. <button class="see" id="skipDeload">Saltarla</button></div>'
@@ -575,9 +575,10 @@ function startWorkout(dayIdx, quick) {
         ${resting ? `<div class="rest-box"><div class="muted small">Descanso</div><div class="rest-t" id="restT"></div>
           <div class="btn-row" style="justify-content:center"><button class="btn ghost sm" id="rPlus">+15 s</button><button class="btn sm" id="rSkip">Saltar</button></div></div>` : ''}
         <div class="sets">
-          <div class="set head"><span>Serie</span><span>kg</span><span>Reps</span><span></span></div>
+          <div class="set head"><span>Serie</span><span>Anterior</span><span>kg</span><span>Reps</span><span>✓</span></div>
           ${sets.map((z, k) => `<div class="set ${z.done ? 'done' : ''}">
             <span class="n">${k + 1}</span>
+            <span class="prev">${last && last[k] ? (last[k].kg ? last[k].kg + ' × ' : '') + last[k].reps : '—'}</span>
             <input type="number" inputmode="decimal" min="0" step="0.5" data-kg="${k}" value="${z.kg}" placeholder="—">
             <input type="number" inputmode="numeric" min="0" data-reps="${k}" value="${z.reps}">
             <button class="check-btn ${z.done ? 'on' : ''}" data-set="${k}" aria-label="Serie ${k + 1} hecha">✓</button>

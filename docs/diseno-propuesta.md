@@ -1,6 +1,6 @@
 # Propuesta de rediseño visual de FitPlan
 
-Guardada el 23 de octubre de 2026. Todavía no se aplica a la app.
+Guardada el 23 de octubre de 2026. **Decisión del usuario: estilo inspirado en Hevy** (azul, tarjetas planas, barra inferior plana con íconos de línea, tablas de series SERIE · ANTERIOR · KG · REPS · ✓). Aplicado en la rama de diseño, pendiente de aprobación.
 Regla: **no se quita ninguna función**, solo cambia cómo se ve.
 
 ## Diagnóstico de la interfaz actual
