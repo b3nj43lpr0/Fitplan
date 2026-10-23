@@ -1189,3 +1189,67 @@ test('PC: Registrar y Buscar en la barra lateral, calendario en una fila y Hoy e
   const nav = await page.locator('.nav').boundingBox();
   expect(nav.height).toBeLessThanOrEqual(901);
 });
+
+// Simula la app Android: Capacitor con el plugin Health (Health Connect) y datos de un reloj
+async function fakeAndroid(page) {
+  await page.addInitScript(() => {
+    const now = new Date();
+    const at = (h, m = 0) => { const d = new Date(now); d.setHours(h, m, 0, 0); return d.toISOString(); };
+    window.__hc = { asked: null, reads: 0 };
+    const samples = {
+      heartRate: [{ value: 62 }, { value: 88 }, { value: 140 }],
+      restingHeartRate: [{ value: 58 }],
+      oxygenSaturation: [{ value: 97 }, { value: 95 }],
+      weight: [{ value: 79.6 }],
+      sleep: [{ value: 450, stages: [{ stage: 'light', durationMinutes: 240 }, { stage: 'deep', durationMinutes: 90 }, { stage: 'rem', durationMinutes: 80 }, { stage: 'awake', durationMinutes: 20 }] }],
+    };
+    const sums = { steps: 8432, distance: 6100, calories: 512, totalCalories: 2380 };
+    window.Capacitor = {
+      isNativePlatform: () => true,
+      Plugins: {
+        Health: {
+          isAvailable: async () => ({ available: true }),
+          requestAuthorization: async o => { window.__hc.asked = o; return { readAuthorized: o.read, readDenied: [] }; },
+          queryAggregated: async o => { window.__hc.reads++; return { samples: [{ value: sums[o.dataType] || 0 }] }; },
+          readSamples: async o => ({ samples: (samples[o.dataType] || []).map(s => ({ ...s, startDate: at(7), endDate: at(8) })) }),
+          queryWorkouts: async () => ({ workouts: [{ workoutType: 'running', duration: 1800, totalEnergyBurned: 310, totalDistance: 5200, startDate: at(7), endDate: at(7, 30), platformId: 'w1' }] }),
+          openHealthConnectSettings: async () => {},
+        },
+      },
+    };
+  });
+  await page.reload();
+}
+
+test('Reloj (app Android): conectar, ver los datos en Hoy, importar entrenamiento y peso una sola vez', async ({ page }) => {
+  await fakeAndroid(page);
+  await page.evaluate(() => { const s = window.__fitplan.get(); const z = n => String(n).padStart(2, '0'); const d = new Date(); const k = `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}`; s.weights = s.weights.filter(w => w.d !== k); window.__fitplan.replace(s); });
+  await page.reload();
+  await page.click('.watch-card [data-watch=connect]');
+  await expect(page.locator('.watch-minis .mini')).toHaveCount(6);
+  await expect(page.locator('.watch-card')).toContainText('8432');
+  await expect(page.locator('.watch-card')).toContainText('6 h 50');
+  expect(await page.evaluate(() => window.__hc.asked.read)).toContain('workouts');
+  const t = await today(page);
+  expect(t.watch.steps).toBe(8432);
+  expect(t.watch.hr).toEqual({ avg: 97, min: 62, max: 140 });
+  const run = t.exercises.find(e => e.id === 'hc-w1');
+  expect(run.kcal).toBe(310);
+  expect(run.minutes).toBe(30);
+  expect((await state(page)).weights.some(w => w.kg === 79.6)).toBe(true);
+  // Si lo borro, no vuelve a aparecer al leer otra vez
+  await page.evaluate(() => { const s = window.__fitplan.get(); const z = n => String(n).padStart(2, '0'); const d = new Date(); const k = `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}`; s.days[k].exercises = s.days[k].exercises.filter(e => e.id !== 'hc-w1'); window.__fitplan.replace(s); });
+  await page.reload();
+  await page.click('.watch-card [data-watch=sync]');
+  await expect(page.locator('.toast')).toContainText('Reloj actualizado');
+  expect((await today(page)).exercises.some(e => e.id === 'hc-w1')).toBe(false);
+  // Perfil: opciones del reloj
+  await page.click('#avatarBtn');
+  await expect(page.locator('[data-watch=sync7]')).toBeVisible();
+});
+
+test('Reloj en el PC/web: sin app Android no muestra la tarjeta vacía y Perfil ofrece descargar la APK', async ({ page }) => {
+  await expect(page.locator('.watch-card')).toHaveCount(0);
+  await page.click('#avatarBtn');
+  await expect(page.locator('a[href*="releases/download/android/FitPlan.apk"]')).toBeVisible();
+});

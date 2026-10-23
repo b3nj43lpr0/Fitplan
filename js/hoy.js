@@ -301,6 +301,7 @@ function viewHoy() {
         <button class="round-btn water-plus" data-water-step="1" aria-label="Agregar un vaso">＋</button>
       </div>
     </div>`,
+    reloj: watchCard(),
     ayuno: fastingCard(),
     deficit: deficitCard(tg),
     desafios: challengesCard(),
@@ -489,14 +490,16 @@ function nextMealCard() {
 }
 
 // ---------- Personalizar Hoy: qué tarjetas ves y en qué orden (se guarda en este teléfono) ----------
-const HOY_CARDS = [['toca', '🍽️ Te toca (próxima comida)'], ['comidas', '📋 Comidas del día'], ['macros', '🥩 Macros'], ['tip', '💡 Consejo del día'], ['ejercicio', '🏃 Ejercicio'],
+const HOY_CARDS = [['toca', '🍽️ Te toca (próxima comida)'], ['comidas', '📋 Comidas del día'], ['macros', '🥩 Macros'], ['reloj', '⌚ Reloj'], ['tip', '💡 Consejo del día'], ['ejercicio', '🏃 Ejercicio'],
   ['agua', '💧 Agua'], ['ayuno', '⏱️ Ayuno'], ['deficit', '🔥 Déficit'], ['desafios', '🏅 Desafíos'], ['plan', '🗓️ Tu plan para hoy'], ['semana', '📊 Últimos 7 días'], ['quecomo', '🤔 ¿Qué como ahora?']];
 const HOY_KEY = pkey('fitplan-hoy');
 function hoyLayout() {
   let l = null;
   try { l = JSON.parse(localStorage.getItem(HOY_KEY)); } catch (e) { /* ignorar */ }
   const all = HOY_CARDS.map(c => c[0]);
-  const order = [...((l && l.order) || []).filter(k => all.includes(k)), ...all.filter(k => !(l && l.order || []).includes(k))];
+  // Las tarjetas nuevas entran en su lugar por defecto, no al final
+  const order = ((l && l.order) || []).filter(k => all.includes(k));
+  all.forEach((k, i) => { if (!order.includes(k)) order.splice(Math.min(i, order.length), 0, k); });
   return { order, hidden: (l && l.hidden) || [] };
 }
 function openHoyEdit() {

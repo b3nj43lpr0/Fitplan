@@ -355,7 +355,7 @@
       fb = {
         app: a, auth: auth.getAuth(a), db: fs.getFirestore(a), doc: fs.doc, collection: fs.collection, getDoc: fs.getDoc, getDocs: fs.getDocs,
         setDoc: fs.setDoc, deleteDoc: fs.deleteDoc, onSnapshot: fs.onSnapshot, runTransaction: fs.runTransaction,
-        GoogleAuthProvider: auth.GoogleAuthProvider, signInWithPopup: auth.signInWithPopup, signOut: auth.signOut,
+        GoogleAuthProvider: auth.GoogleAuthProvider, signInWithPopup: auth.signInWithPopup, signInWithCredential: auth.signInWithCredential, signOut: auth.signOut,
       };
       auth.onAuthStateChanged(fb.auth, u => {
         unsubs.forEach(f => f()); unsubs = [];
@@ -425,10 +425,25 @@
     notify: schedulePush,
     async signIn() {
       if (!fb) return;
-      try { await fb.signInWithPopup(fb.auth, new fb.GoogleAuthProvider()); }
-      catch (e) { set({ status: 'No se pudo iniciar sesión' }); }
+      // En la app Android Google no permite la ventana emergente: se usa la cuenta del teléfono
+      // (plugin nativo) y con ese token se entra a Firebase igual que en la web
+      const nativeAuth = typeof window !== 'undefined' && window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()
+        && window.Capacitor.Plugins && window.Capacitor.Plugins.FirebaseAuthentication;
+      try {
+        if (nativeAuth) {
+          const r = await nativeAuth.signInWithGoogle();
+          const tok = r && r.credential && r.credential.idToken;
+          if (!tok) throw new Error('sin token');
+          await fb.signInWithCredential(fb.auth, fb.GoogleAuthProvider.credential(tok));
+        } else await fb.signInWithPopup(fb.auth, new fb.GoogleAuthProvider());
+      } catch (e) { set({ status: 'No se pudo iniciar sesión' }); }
     },
-    async signOut() { if (fb) await fb.signOut(fb.auth); },
+    async signOut() {
+      if (!fb) return;
+      const nativeAuth = typeof window !== 'undefined' && window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.FirebaseAuthentication;
+      if (nativeAuth) await nativeAuth.signOut().catch(() => {});
+      await fb.signOut(fb.auth);
+    },
     ask,
     syncNow: refresh,
     backups: { list: listBackups, create: backupNow, load: loadBackup },

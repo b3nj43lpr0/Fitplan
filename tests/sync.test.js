@@ -48,7 +48,7 @@ function device(name, initial, profileId) {
   vm.runInContext(code, ctx);
   const api = win.FitSync;
   api._test.inject(fakeFb());
-  return { name, api, get state() { return state; }, set state(s) { state = s; }, store };
+  return { name, api, win, get state() { return state; }, set state(s) { state = s; }, store };
 }
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 let fails = 0;
@@ -150,6 +150,22 @@ const ok = (c, msg) => { console.log((c ? 'OK  ' : 'FAIL') + ' ' + msg); if (!c)
   const C = device('C', { profile: { nombre: 'X' }, days: {}, workouts: [], _ts: 0 });
   await C.api._test.start({ uid: 'u1' }); await sleep(10);
   ok(C.state.profile.nombre === 'Benja' && /reglas/.test(C.api.state.status), 'sin permiso: usa el formato antiguo y avisa');
+  // App Android: Google se elige con el plugin nativo y Firebase entra con ese token (sin ventana emergente)
+  const N = device('N', { profile: { nombre: 'X' }, days: {}, workouts: [], _ts: 0 });
+  let via = null;
+  N.api._test.inject({
+    ...fakeFb(), auth: {},
+    GoogleAuthProvider: Object.assign(function () {}, { credential: tok => ({ tok }) }),
+    signInWithPopup: async () => { via = 'popup'; },
+    signInWithCredential: async (a, c) => { via = 'native:' + c.tok; },
+  });
+  const winN = { isNativePlatform: () => true, Plugins: { FirebaseAuthentication: { signInWithGoogle: async () => ({ credential: { idToken: 'tok123' } }) } } };
+  N.win.Capacitor = winN;
+  await N.api.signIn();
+  ok(via === 'native:tok123', 'app Android: inicio de sesión con la cuenta del teléfono');
+  N.win.Capacitor = { isNativePlatform: () => false };
+  await N.api.signIn();
+  ok(via === 'popup', 'web: inicio de sesión con ventana de Google');
   console.log(fails ? `${fails} fallas` : 'Todo bien');
   process.exit(fails ? 1 : 0);
 })();

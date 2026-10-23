@@ -1,0 +1,73 @@
+name: App Android (APK)
+# Construye la APK gratis en GitHub y la deja en Releases → "FitPlan para Android".
+# La app carga la web publicada, así que solo hace falta una APK nueva cuando cambia algo de apk/.
+on:
+  push:
+    branches: [main]
+    paths: ['apk/**', '.github/workflows/apk.yml']
+  pull_request:
+    paths: ['apk/**', '.github/workflows/apk.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: apk-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: apk
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apk/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+      - run: npm ci
+      # Sin google-services.json (de Firebase) no se puede iniciar sesión con Google en la app,
+      # y el plugin cerraría la app al abrir: en ese caso se compila sin él.
+      - name: Inicio de sesión con Google
+        run: |
+          if [ -f google-services.json ]; then
+            cp google-services.json android/app/google-services.json
+            echo "Con inicio de sesión con Google"
+          else
+            npm uninstall @capacitor-firebase/authentication firebase
+            echo "::warning::Falta apk/google-services.json: la APK se compila sin inicio de sesión con Google"
+          fi
+      - run: npx cap sync android
+      - name: Compilar APK
+        working-directory: apk/android
+        env:
+          VERSION_CODE: ${{ github.run_number }}
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon
+          cp app/build/outputs/apk/release/app-release.apk ../FitPlan.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FitPlan-apk
+          path: apk/FitPlan.apk
+          retention-days: 14
+      # En main se publica (o reemplaza) la descarga fija: Releases → "FitPlan para Android"
+      - name: Publicar en Releases
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NOTES="Instala FitPlan.apk en tu teléfono Android (8 o más). Compilación ${{ github.run_number }}."
+          if gh release view android >/dev/null 2>&1; then
+            gh release upload android FitPlan.apk --clobber
+            gh release edit android --notes "$NOTES"
+          else
+            gh release create android FitPlan.apk --title "FitPlan para Android" --notes "$NOTES" --latest
+          fi

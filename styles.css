@@ -1091,3 +1091,9 @@ h1 .bub, h2 .bub, h3 .bub { width: 1.45em; height: 1.45em; margin-right: .3em; v
   .card .grid.g2 { gap: 12px 16px; }
 }
 @media (min-width: 1600px) { :root { --z: 1.18; } }
+
+/* ---------- Reloj ---------- */
+.watch-minis { grid-template-columns: repeat(3, 1fr); }
+.watch-minis .mini { position: relative; padding-top: 30px; }
+.watch-minis .wico { position: absolute; top: 8px; left: 50%; transform: translateX(-50%); font-size: 18px; }
+@media (max-width: 380px) { .watch-minis { grid-template-columns: repeat(2, 1fr); } }

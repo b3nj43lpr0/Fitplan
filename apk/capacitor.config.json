@@ -1,0 +1,18 @@
+{
+  "appId": "cl.fitplan.app",
+  "appName": "FitPlan",
+  "webDir": "www",
+  "server": {
+    "url": "https://b3nj43lpr0.github.io/Fitplan/",
+    "errorPath": "sin-conexion.html"
+  },
+  "android": {
+    "allowMixedContent": false
+  },
+  "plugins": {
+    "FirebaseAuthentication": {
+      "skipNativeAuth": true,
+      "providers": ["google.com"]
+    }
+  }
+}
