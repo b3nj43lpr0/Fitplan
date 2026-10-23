@@ -970,3 +970,66 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); ba
 .hero-bar { margin: 10px 0 2px; height: 6px; }
 .nav button.active, .nav button.active:hover { color: var(--accent); }
 @media (min-width: 761px) { .nav button.active:hover { background: var(--accent-soft); } }
+
+/* ---------- UX: botón ＋, entrenamiento en curso, buscador, gestos y primer uso ---------- */
+.avatar.sm { width: 40px; height: 40px; font-size: 16px; border: 0; cursor: pointer; }
+.avatar { border: 0; cursor: pointer; }
+.page-head .avatar.sm .lico { width: 19px; height: 19px; }
+@media (min-width: 761px) { .page-head .avatar.sm { display: none; } }
+.fab { position: fixed; right: 18px; bottom: calc(84px + env(safe-area-inset-bottom)); z-index: 12; width: 58px; height: 58px; border-radius: 18px; border: 0; background: var(--accent); color: #fff; display: grid; place-items: center; cursor: pointer; box-shadow: 0 8px 22px color-mix(in srgb, var(--accent) 45%, transparent); transition: transform .15s; }
+.fab svg { width: 28px; height: 28px; }
+.fab:active { transform: scale(.92); }
+@media (min-width: 761px) { .fab { bottom: 28px; right: 28px; } }
+body[data-view="coach"] .fab, body[data-view="perfil"] .fab { display: none; }
+body.has-wbar .fab { bottom: calc(140px + env(safe-area-inset-bottom)); }
+@media (min-width: 761px) { body.has-wbar .fab { bottom: 92px; } }
+.qa-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 4px; }
+.qa-tile { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 14px 4px 12px; border: 0; border-radius: var(--radius-sm); background: var(--soft); color: var(--text); font: inherit; font-size: 12.5px; font-weight: 600; line-height: 1.2; text-align: center; cursor: pointer; }
+.qa-tile span { font-size: 28px; line-height: 1; }
+.qa-tile:active { transform: scale(.95); }
+@media (max-width: 360px) { .qa-grid { grid-template-columns: repeat(3, 1fr); } }
+.wbar { position: fixed; left: 0; right: 0; bottom: calc(64px + env(safe-area-inset-bottom)); z-index: 11; display: flex; align-items: center; gap: 10px; padding: 12px 16px; border: 0; border-top: 1px solid var(--line); background: var(--card); color: var(--text); font: inherit; font-size: 14px; text-align: left; cursor: pointer; }
+.wbar[hidden] { display: none; }
+.wb-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--good); flex: none; animation: pulse 1.6s infinite; }
+.wb-txt { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wb-t { font-variant-numeric: tabular-nums; font-weight: 700; }
+.wb-go { color: var(--accent); font-weight: 700; }
+@media (min-width: 761px) { .wbar { left: auto; right: 24px; bottom: 24px; width: 380px; border: 1px solid var(--line); border-radius: var(--radius-sm); box-shadow: 0 8px 24px rgba(0, 0, 0, .12); } }
+body.has-wbar main { padding-bottom: calc(150px + env(safe-area-inset-bottom)); }
+.gs-out { margin-top: 10px; }
+.gs-h { margin: 14px 0 4px; font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.gs-row { width: 100%; background: none; border: 0; border-bottom: 1px solid var(--line); font: inherit; color: inherit; text-align: left; padding: 10px 4px; }
+.item { transition: transform .15s ease; }
+.item.swipe-del { background: color-mix(in srgb, var(--danger) 14%, transparent); }
+.first-tip { display: flex; align-items: center; gap: 10px; background: var(--accent-soft); border-radius: var(--radius-sm); padding: 12px; margin: 0 0 14px; font-size: 14px; }
+.first-tip p { margin: 0; flex: 1; }
+.first-tip > span { font-size: 22px; }
+.coach-page { height: calc(100dvh - 230px - env(safe-area-inset-bottom)); min-height: 360px; }
+@media (min-width: 761px) { .coach-page { height: calc(100vh - 170px); } }
+.hoy-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; align-items: start; }
+@media (max-width: 760px) { .hoy-cards { grid-template-columns: 1fr; } }
+.toca .toca-main { display: flex; gap: 12px; align-items: center; margin: 4px 0 12px; cursor: pointer; }
+.toca .toca-main b { font-size: 17px; }
+.btn-row.two > .btn { flex: 1; }
+.nudge-more { margin: -2px 0 12px; }
+.nudge-more summary { font-size: 14px; color: var(--muted); padding: 4px 2px 8px; }
+.nudge-more .nudge { margin-top: 0; }
+.he-row { gap: 6px; }
+.he-check { display: flex; align-items: center; gap: 10px; flex: 1; margin: 0; color: var(--text); font-size: 15px; font-weight: 500; cursor: pointer; }
+.he-check input { width: 20px; height: 20px; accent-color: var(--accent); }
+.hello .round-btn .lico { width: 20px; height: 20px; }
+.gym-set.done { background: color-mix(in srgb, var(--good) 16%, transparent); border-radius: var(--radius-xs); }
+.gym-set.done input { background: transparent; }
+.gym-set .check-btn { width: 32px; height: 36px; font-size: 15px; }
+.gym-set-acts { display: flex; gap: 16px; }
+.gym-live { display: inline-flex; align-items: center; gap: 6px; background: var(--soft); border-radius: 99px; padding: 6px 12px; margin: 0 0 8px; font-variant-numeric: tabular-nums; }
+.gym-rest { position: sticky; top: -22px; z-index: 2; }
+.train-home .start-empty { width: 100%; font-size: 16px; padding: 15px; }
+.repeat-last { margin-top: 12px; border-top: 1px solid var(--line); border-bottom: 0; padding-top: 14px; }
+.hist-set { display: grid; grid-template-columns: 28px 1fr auto; gap: 8px; padding: 6px 4px; font-variant-numeric: tabular-nums; border-top: 1px solid var(--line); }
+.hist-set .n { font-weight: 700; text-align: center; color: var(--muted); }
+
+/* Toast oculto de verdad (con un modal abierto subía arriba y quedaba una píldora vacía visible) */
+.toast:not(.show) { opacity: 0; visibility: hidden; }
+/* Espacio al final para que el botón ＋ y la barra de entrenamiento no tapen lo último */
+@media (max-width: 760px) { body:not([data-view=coach]) #main { padding-bottom: calc(110px + env(safe-area-inset-bottom)); } body.has-wbar:not([data-view=coach]) #main { padding-bottom: calc(160px + env(safe-area-inset-bottom)); } }

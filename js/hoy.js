@@ -270,16 +270,64 @@ function viewHoy() {
       <button class="btn ghost sm" data-log-recipe="${r.id}" data-factor="${pm.f}" data-meal="${m.id}">+ Agregar</button></div>` : '';
   }).join('') : '';
 
+  // Cada tarjeta de Hoy por separado: se pueden ocultar y reordenar (Personalizar Hoy)
+  const cards = {
+    toca: nextMealCard(),
+    tip: dailyTipCard(),
+    macros: `<div class="card">
+      <div class="row"><h2>Macros del día</h2><button class="see" data-go="recetas">Ver recetas ›</button></div>
+      ${dg.train ? `<p class="muted small" style="margin:-4px 0 6px">💪 Día de entrenamiento: tu meta sube ${r0(dg.carb - tg.carb)} g de carbohidratos para recuperarte.</p>` : ''}
+      <div class="rings3">
+        ${macroRing('Proteína', t.p, dg.prot, 'var(--prot)')}
+        ${macroRing('Carbos', t.c, dg.carb, 'var(--carb)')}
+        ${macroRing('Grasas', t.g, dg.fat, 'var(--fat)')}
+      </div>
+    </div>`,
+    comidas: `<div class="card">
+      <div class="row"><h2>Comidas</h2><div class="btn-row" style="margin:0">${!d.foods.length && prev.foods.length ? '<button class="btn ghost sm" data-repeat="all">↺ Copiar ayer</button>' : ''}<button class="btn sm" data-go="comidas">+ Agregar</button></div></div>
+      ${meals}
+    </div>`,
+    plan: planHtml ? `<div class="card"><div class="row"><h2>Tu plan para hoy</h2><button class="btn ghost sm" data-go="recetas">Ver plan</button></div><div class="list">${planHtml}</div></div>` : '',
+    ejercicio: `<div class="card">
+      <div class="row"><h2>Ejercicio</h2><button class="btn sm burn" data-go="ejercicio">+ Agregar</button></div>
+      <div class="list">${ex}</div>
+    </div>`,
+    agua: `<div class="card water-card">
+      <div class="row"><h2>💧 Agua</h2><span class="muted small">${(d.water * 0.25).toLocaleString('es')} de ${(tg.water * 0.25).toLocaleString('es')} L</span></div>
+      <div class="water-row">
+        <button class="round-btn" data-water-step="-1" aria-label="Quitar un vaso" ${d.water ? '' : 'disabled'}>−</button>
+        <div class="water-main"><div class="water-n"><b>${d.water}</b> / ${tg.water} vasos</div>
+          <div class="bar"><span style="width:${Math.min(100, d.water / tg.water * 100)}%;background:var(--water)"></span></div></div>
+        <button class="round-btn water-plus" data-water-step="1" aria-label="Agregar un vaso">＋</button>
+      </div>
+    </div>`,
+    ayuno: fastingCard(),
+    deficit: deficitCard(tg),
+    desafios: challengesCard(),
+    semana: `<div class="card">
+      <div class="row"><h2>Últimos 7 días</h2><button class="see" data-go="progreso">Ver progreso ›</button></div>
+      <div class="chart">${chart}</div>
+      <div class="legend"><span><i style="background:var(--carb)"></i>Dentro de tu meta</span><span><i style="background:var(--prot)"></i>Te pasaste</span></div>
+    </div>`,
+    quecomo: `<div class="card">
+      <h2>¿Qué como ahora?</h2>
+      <p class="muted small" style="margin-top:0">${over ? 'Ya alcanzaste tu objetivo. Si tienes hambre, elige algo liviano y alto en proteína.' : `Te quedan ${r0(left)} kcal y ${r0(Math.max(0, tg.prot - t.p))} g de proteína por cubrir.`}</p>
+      <button class="btn ghost" data-go="recetas">Ver sugerencias de recetas →</button>
+    </div>`,
+  };
+  const lay = hoyLayout();
+  const ns = nudges(d, tg);
+  const nudgeHtml = n => `<div class="nudge"><span class="ni">${n.ico}</span><span class="nt">${esc(n.txt)}</span><button class="btn sm" data-nudge="${n.act}">${n.btn}</button><button class="icon-btn" data-dismiss="${n.id}" aria-label="Ocultar">✕</button></div>`;
   return `
     <div class="hello">
-      <button class="avatar" id="avatarBtn" aria-label="Cambiar de persona" title="Cambiar de persona">${initial(state.profile.nombre)}</button>
+      <button class="avatar" id="avatarBtn" data-go="perfil" aria-label="Perfil y ajustes" title="Perfil y ajustes">${initial(state.profile.nombre)}</button>
       <div class="who"><div class="greet">${greeting()} 👋</div><div class="name">${esc(state.profile.nombre || 'Hola')}</div></div>
-      <button class="round-btn coach-btn" id="coachBtn" aria-label="Hablar con tu coach" title="Tu coach">${ICON.chat}</button>
       ${streak() ? `<button class="streak" data-go="progreso" title="Días seguidos registrando">🔥 ${streak()}</button>` : ''}
-      <button class="round-btn" data-go="perfil" aria-label="Perfil">${ICON.gear}</button>
+      <button class="round-btn" id="gSearch" aria-label="Buscar en la app" title="Buscar">${ICON.search}</button>
     </div>
     ${dateBar()}
-    ${nudges(d, tg).map(n => `<div class="nudge"><span class="ni">${n.ico}</span><span class="nt">${esc(n.txt)}</span><button class="btn sm" data-nudge="${n.act}">${n.btn}</button><button class="icon-btn" data-dismiss="${n.id}" aria-label="Ocultar">✕</button></div>`).join('')}
+    ${ns.length ? nudgeHtml(ns[0]) : ''}
+    ${ns.length > 1 ? `<details class="nudge-more"><summary>🔔 ${ns.length - 1} ${ns.length === 2 ? 'aviso más' : 'avisos más'} para hoy</summary>${ns.slice(1).map(nudgeHtml).join('')}</details>` : ''}
     <div class="hero">
       <div class="ring">${ring(t.kcal, budget, over ? 'var(--danger)' : 'var(--accent)', 150, 12, 'var(--soft)')}
         <div class="center"><span class="big" data-count="${r0(Math.abs(left))}">${r0(Math.abs(left))}</span><span class="muted small">${over ? 'kcal de más' : 'kcal restantes'}</span></div>
@@ -297,53 +345,8 @@ function viewHoy() {
         ${tg.ajuste ? `<span class="pill">Ajuste automático ${tg.ajuste > 0 ? '+' : ''}${tg.ajuste} kcal</span>` : ''}
       </div>
     </div>
-    ${dailyTipCard()}
-    <div class="card">
-      <div class="row"><h2>Macros del día</h2><button class="see" data-go="recetas">Ver recetas ›</button></div>
-      ${dg.train ? `<p class="muted small" style="margin:-4px 0 6px">💪 Día de entrenamiento: tu meta sube ${r0(dg.carb - tg.carb)} g de carbohidratos para recuperarte.</p>` : ''}
-      <div class="rings3">
-        ${macroRing('Proteína', t.p, dg.prot, 'var(--prot)')}
-        ${macroRing('Carbos', t.c, dg.carb, 'var(--carb)')}
-        ${macroRing('Grasas', t.g, dg.fat, 'var(--fat)')}
-      </div>
-    </div>
-    <div class="grid g2">
-      <div>
-        <div class="card">
-          <div class="row"><h2>Comidas</h2><div class="btn-row" style="margin:0">${!d.foods.length && prev.foods.length ? '<button class="btn ghost sm" data-repeat="all">↺ Copiar ayer</button>' : ''}<button class="btn sm" data-go="comidas">+ Agregar</button></div></div>
-          ${meals}
-        </div>
-        ${planHtml ? `<div class="card"><div class="row"><h2>Tu plan para hoy</h2><button class="btn ghost sm" data-go="recetas">Ver plan</button></div><div class="list">${planHtml}</div></div>` : ''}
-      </div>
-      <div>
-        <div class="card">
-          <div class="row"><h2>Ejercicio</h2><button class="btn sm burn" data-go="ejercicio">+ Agregar</button></div>
-          <div class="list">${ex}</div>
-        </div>
-        <div class="card water-card">
-          <div class="row"><h2>💧 Agua</h2><span class="muted small">${(d.water * 0.25).toLocaleString('es')} de ${(tg.water * 0.25).toLocaleString('es')} L</span></div>
-          <div class="water-row">
-            <button class="round-btn" data-water-step="-1" aria-label="Quitar un vaso" ${d.water ? '' : 'disabled'}>−</button>
-            <div class="water-main"><div class="water-n"><b>${d.water}</b> / ${tg.water} vasos</div>
-              <div class="bar"><span style="width:${Math.min(100, d.water / tg.water * 100)}%;background:var(--water)"></span></div></div>
-            <button class="round-btn water-plus" data-water-step="1" aria-label="Agregar un vaso">＋</button>
-          </div>
-        </div>
-        ${fastingCard()}
-        ${deficitCard(tg)}
-        ${challengesCard()}
-        <div class="card">
-          <div class="row"><h2>Últimos 7 días</h2><button class="see" data-go="progreso">Ver progreso ›</button></div>
-          <div class="chart">${chart}</div>
-          <div class="legend"><span><i style="background:var(--carb)"></i>Dentro de tu meta</span><span><i style="background:var(--prot)"></i>Te pasaste</span></div>
-        </div>
-        <div class="card">
-          <h2>¿Qué como ahora?</h2>
-          <p class="muted small" style="margin-top:0">${over ? 'Ya alcanzaste tu objetivo. Si tienes hambre, elige algo liviano y alto en proteína.' : `Te quedan ${r0(left)} kcal y ${r0(Math.max(0, tg.prot - t.p))} g de proteína por cubrir.`}</p>
-          <button class="btn ghost" data-go="recetas">Ver sugerencias de recetas →</button>
-        </div>
-      </div>
-    </div>`;
+    <div class="hoy-cards">${lay.order.filter(k => !lay.hidden.includes(k)).map(k => cards[k] || '').join('')}</div>
+    <button class="btn ghost" id="hoyEdit" style="width:100%;margin-top:4px">✏️ Personalizar Hoy</button>`;
 }
 bind.hoy = () => {
   bindDateBar();
@@ -381,9 +384,14 @@ bind.hoy = () => {
     if (kind === 'train') { ui.rutTab = 'rutina'; go('rutinas'); startWorkout(Number(arg)); }
   }));
   bindLogRecipe(currentDate);
-  $('#avatarBtn').addEventListener('click', openProfiles);
-  $('#coachBtn').addEventListener('click', openCoach);
   bindDailyTip();
+  $('#gSearch').addEventListener('click', openGlobalSearch);
+  $('#hoyEdit').addEventListener('click', openHoyEdit);
+  $$('[data-toca-swap]').forEach(b => b.addEventListener('click', () => {
+    const v = b.dataset.tocaSwap;
+    if (v.includes(':')) { const [di, mealId] = v.split(':'); swapPlanMeal(Number(di), mealId); }
+    else { ui.skipRec = [...(ui.skipRec || []), v]; render(); }
+  }));
   $$('[data-prog-tab]').forEach(b => b.addEventListener('click', () => { ui.progTab = b.dataset.progTab; go('progreso'); }));
   $$('[data-check-ch]').forEach(b => b.addEventListener('click', () => {
     const c = state.challenges.find(x => x.id === b.dataset.checkCh && !x.closed);
@@ -449,5 +457,65 @@ function editFoodEntry(id) {
     m.querySelector('#eDel').addEventListener('click', () => {
       closeModal(); removeWithUndo(d.foods, x => x.id === id);
     });
+  });
+}
+
+// ---------- "Te toca": la próxima comida, de tu plan o una idea que calza con lo que te queda ----------
+function nextMealCard() {
+  if (currentDate !== todayKey()) return '';
+  const { meal, target, left } = nextMealTarget();
+  const planDay = state.plan ? state.plan.days.findIndex(x => x.date === todayKey()) : -1;
+  const pm = planDay >= 0 && state.plan.days[planDay].meals[meal.id];
+  let r = pm && allRecipes().find(x => x.id === pm.id), f = pm ? pm.f : 1;
+  const fromPlan = !!r;
+  if (!r) {
+    // Sin plan: la receta que mejor calza (sin azar, para que no cambie cada vez que se redibuja)
+    const tgt = left > 0 ? target : 200, skip = ui.skipRec || [];
+    const p = state.profile;
+    const pool = recipesFor(meal.id).filter(x => !skip.includes(x.id));
+    if (!pool.length) return '';
+    const score = x => { const n = recipeNutrition(x, scaleFactor(x, tgt)); return Math.abs(n.kcal - tgt) / tgt - ((p.objetivo !== 'mantener' && x.tags.includes('alta-proteina')) ? 0.15 : 0); };
+    r = pool.reduce((a, x) => (score(x) < score(a) ? x : a));
+    f = scaleFactor(r, tgt);
+  }
+  const n = recipeNutrition(r, f);
+  return `<div class="card toca">
+    <div class="row"><span class="muted small">Te toca · ${MEAL_ICO[meal.id]} ${meal.name}${fromPlan ? ' · de tu plan' : ''}</span><button class="see" data-go="recetas">Más ideas ›</button></div>
+    <div class="toca-main" data-open-recipe="${r.id}" data-factor="${f}" role="button" tabindex="0"><span class="fi lg">${recipeIcon(r)}</span>
+      <div class="info"><b>${esc(r.name)}</b><div class="muted small">${r0(n.kcal)} kcal · P ${r0(n.p)} g · C ${r0(n.c)} g · G ${r0(n.g)} g</div></div></div>
+    <div class="btn-row two"><button class="btn" data-log-recipe="${r.id}" data-factor="${f}" data-meal="${meal.id}">✓ Comí esto</button>
+      <button class="btn ghost" data-toca-swap="${fromPlan ? planDay + ':' + meal.id : r.id}">↻ Cambiar</button></div>
+  </div>`;
+}
+
+// ---------- Personalizar Hoy: qué tarjetas ves y en qué orden (se guarda en este teléfono) ----------
+const HOY_CARDS = [['toca', '🍽️ Te toca (próxima comida)'], ['comidas', '📋 Comidas del día'], ['macros', '🥩 Macros'], ['tip', '💡 Consejo del día'], ['ejercicio', '🏃 Ejercicio'],
+  ['agua', '💧 Agua'], ['ayuno', '⏱️ Ayuno'], ['deficit', '🔥 Déficit'], ['desafios', '🏅 Desafíos'], ['plan', '🗓️ Tu plan para hoy'], ['semana', '📊 Últimos 7 días'], ['quecomo', '🤔 ¿Qué como ahora?']];
+const HOY_KEY = pkey('fitplan-hoy');
+function hoyLayout() {
+  let l = null;
+  try { l = JSON.parse(localStorage.getItem(HOY_KEY)); } catch (e) { /* ignorar */ }
+  const all = HOY_CARDS.map(c => c[0]);
+  const order = [...((l && l.order) || []).filter(k => all.includes(k)), ...all.filter(k => !(l && l.order || []).includes(k))];
+  return { order, hidden: (l && l.hidden) || [] };
+}
+function openHoyEdit() {
+  const lay = hoyLayout();
+  const paint = m => {
+    m.querySelector('#heList').innerHTML = lay.order.map((k, i) => `<div class="item he-row">
+      <label class="he-check"><input type="checkbox" data-he-on="${k}" ${lay.hidden.includes(k) ? '' : 'checked'}><span>${HOY_CARDS.find(c => c[0] === k)[1]}</span></label>
+      <button class="icon-btn" data-he-up="${i}" aria-label="Subir" ${i ? '' : 'disabled'}>↑</button><button class="icon-btn" data-he-down="${i}" aria-label="Bajar" ${i < lay.order.length - 1 ? '' : 'disabled'}>↓</button></div>`).join('');
+    const mv = (i, d) => { const o = lay.order; [o[i], o[i + d]] = [o[i + d], o[i]]; paint(m); };
+    m.querySelectorAll('[data-he-on]').forEach(c => c.addEventListener('change', () => { lay.hidden = c.checked ? lay.hidden.filter(x => x !== c.dataset.heOn) : [...lay.hidden, c.dataset.heOn]; }));
+    m.querySelectorAll('[data-he-up]').forEach(b => b.addEventListener('click', () => mv(Number(b.dataset.heUp), -1)));
+    m.querySelectorAll('[data-he-down]').forEach(b => b.addEventListener('click', () => mv(Number(b.dataset.heDown), 1)));
+  };
+  openModal(`<h2>✏️ Personalizar Hoy</h2>
+    <p class="muted small" style="margin-top:-6px">Marca lo que quieres ver y ordénalo con las flechas. El anillo de calorías siempre va arriba.</p>
+    <div class="list" id="heList"></div>
+    <div class="btn-row two" style="margin-top:12px"><button class="btn ghost" id="heReset">Restablecer</button><button class="btn" id="heSave">Guardar</button></div>`, m => {
+    paint(m);
+    m.querySelector('#heSave').addEventListener('click', () => { try { localStorage.setItem(HOY_KEY, JSON.stringify(lay)); } catch (e) { /* ignorar */ } closeModal(); render(); toast('Hoy quedó a tu gusto ✓'); });
+    m.querySelector('#heReset').addEventListener('click', () => { try { localStorage.removeItem(HOY_KEY); } catch (e) { /* ignorar */ } closeModal(); render(); });
   });
 }

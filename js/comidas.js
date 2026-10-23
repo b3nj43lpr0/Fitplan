@@ -75,13 +75,20 @@ function foodListHtml() {
     </div>`).join('') : `<div class="empty">${ui.foodCat === FAV ? 'Aún no tienes favoritas. Abre un alimento y toca ☆ para guardarlo aquí.' : ui.foodCat === RECENT ? 'Aquí aparecerá lo que registres.' : 'No encontré ese alimento. Escanéalo o créalo con los botones de arriba.'}</div>`)
     + (list.length > shown.length ? `<button class="btn ghost" id="moreFoods" style="width:100%;margin-top:10px">Ver más (${list.length - shown.length})</button>` : '');
 }
+// Comidas tiene 4 secciones: registrar lo que comes, recetas, plan semanal y lista de compras
+const COM_TABS = [['registrar', 'Registrar'], ['recetas', 'Recetas'], ['plan', 'Plan'], ['compras', 'Compras']];
 function viewComidas() {
+  const tab = ui.comTab || 'registrar';
+  const head = pageHead('Comidas') + tabs('com', tab, COM_TABS);
+  if (tab !== 'registrar') { ui.recipeTab = tab; return head + recetasBody(); }
+  return head + comidasRegistrar();
+}
+function comidasRegistrar() {
   const cats = ['Todas', FAV, RECENT, COMBOS, ...new Set(allFoods().map(f => f.cat))];
   const tg = calcTargets();
   const t = totals(peekDay(currentDate));
   const left = tg.kcal + t.burned - t.kcal;
   return `
-    ${pageHead('Comidas')}
     ${dateBar()}
     <div class="left-bar"><span>${left >= 0 ? `Te quedan <b>${r0(left)} kcal</b>` : `Te pasaste <b>${r0(-left)} kcal</b>`}</span><span class="muted small">P ${r0(t.p)}/${r0(tg.prot)} g</span></div>
     <div class="meal-pick" role="radiogroup" aria-label="Agregar a">${MEALS.map(m => `<button class="${m.id === ui.meal ? 'on' : ''}" data-pick-meal="${m.id}" role="radio" aria-checked="${m.id === ui.meal}"><span>${MEAL_ICO[m.id]}</span>${m.name}</button>`).join('')}</div>
@@ -158,6 +165,8 @@ function openFoodSheet(id) {
   });
 }
 bind.comidas = () => {
+  $$('[data-tab-com]').forEach(b => b.addEventListener('click', () => { ui.comTab = b.dataset.tabCom; render(); animateEnter(); }));
+  if ((ui.comTab || 'registrar') !== 'registrar') return bind.recetas();
   bindDateBar();
   const bindList = () => {
     $$('[data-quick]').forEach(b => b.addEventListener('click', e => {

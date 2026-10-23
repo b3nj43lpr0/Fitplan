@@ -29,6 +29,17 @@ function weightChart(ws) {
   </svg><div class="muted small">Puntos = cada pesaje · Línea de color = promedio de 7 días (más confiable que un día suelto).</div>`;
 }
 // Por ejercicio: sesiones, mejor 1RM, peso máximo, más repeticiones, mejor volumen y cada vez que rompiste tu récord
+// Guarda un pesaje (desde Progreso o desde el botón ＋)
+function saveWeight(d, kg) {
+  if (!d || !(kg >= 30 && kg <= 300)) { toast('Revisa la fecha y el peso'); return false; }
+  state.weights = state.weights.filter(w => w.d !== d);
+  state.weights.push({ d, kg: r1(kg) });
+  state.profile.peso = currentWeight();
+  const step = autoAdjust();
+  save(); render();
+  toast(step ? `Peso guardado. Ajusté tu meta ${step > 0 ? '+' : ''}${r0(step)} kcal` : 'Peso guardado');
+  return true;
+}
 // ---------- Gasto real (TDEE adaptativo) ----------
 function realTdeeCard() {
   const p = state.profile, r = realTdee();
@@ -454,16 +465,7 @@ bind.progreso = () => {
     el.addEventListener('keydown', ev => { if (ev.key === 'Enter') open(); });
   });
   if (ui.progTab !== 'peso') return;
-  $('#addWeight').addEventListener('click', () => {
-    const d = $('#wDate').value, kg = Number($('#wKg').value);
-    if (!d || !(kg >= 30 && kg <= 300)) return toast('Revisa la fecha y el peso');
-    state.weights = state.weights.filter(w => w.d !== d);
-    state.weights.push({ d, kg: r1(kg) });
-    state.profile.peso = currentWeight();
-    const step = autoAdjust();
-    save(); render();
-    toast(step ? `Peso guardado. Ajusté tu meta ${step > 0 ? '+' : ''}${r0(step)} kcal` : 'Peso guardado');
-  });
+  $('#addWeight').addEventListener('click', () => saveWeight($('#wDate').value, Number($('#wKg').value)));
   $$('[data-del-w]').forEach(b => b.addEventListener('click', () => {
     removeWithUndo(state.weights, w => w.d === b.dataset.delW, 'Peso eliminado');
   }));

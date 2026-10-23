@@ -101,6 +101,7 @@ function exUsage() {
 const fmtSets = sets => sets.map(z => (z.kg ? z.kg + '×' : '') + z.reps).join(' · ');
 
 // ---------- Calorías ----------
+const GYM_REST = 90; // segundos de descanso entre series (como en el modo rutina)
 const GYM_INTENSITY = { suave: ['😌 Suave', 0.8], normal: ['🙂 Normal', 1], intensa: ['🥵 Intensa', 1.2] };
 // Calorías del gym: el tiempo en serie (≈4 s por repetición, mínimo 20 s) va al gasto del ejercicio (MET)
 // y el resto de la sesión es descanso activo (MET 2-3). Se suma un 10 % del trabajo por el gasto posterior (EPOC).
@@ -172,11 +173,24 @@ function openGymLog(wid) {
   let screen = d.items.length ? 'session' : 'picker';
   let fGroup = ui.gymGroup || 'todos', fEq = 'todos', q = '', limit = 50;
   const keep = () => { if (!d.wid) storeGymDraft(d.items.length ? d : null); };
+  let restEnd = 0;
   openModal('<div id="gym"></div>', m => {
     m.querySelector('.modal').classList.add('gym-modal');
     // Al cerrar se redibuja la pantalla para mostrar si quedó un borrador
-    m._cleanup = () => setTimeout(render);
     const box = m.querySelector('#gym');
+    // Reloj de la sesión y descanso entre series (se actualizan cada segundo sin redibujar todo)
+    const clock = setInterval(() => {
+      const el = box.querySelector('#gEl');
+      if (el && d.t0) { const t = Math.floor((Date.now() - d.t0) / 1000); el.textContent = `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`; }
+      const rb = box.querySelector('#gRest');
+      if (!rb) return;
+      const left = Math.ceil((restEnd - Date.now()) / 1000);
+      if (restEnd && left <= 0) { restEnd = 0; rb.innerHTML = ''; if (typeof beep === 'function') beep(); if (navigator.vibrate) navigator.vibrate([200, 100, 200]); return; }
+      rb.innerHTML = left > 0 ? `<div class="rest-box gym-rest"><div class="muted small">Descanso</div><div class="rest-t">${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}</div>
+        <div class="btn-row" style="justify-content:center"><button class="btn ghost sm" data-gr="15">+15 s</button><button class="btn sm" data-gr="skip">Saltar</button></div></div>` : '';
+    }, 250);
+    box.addEventListener('click', e => { const b = e.target.closest('[data-gr]'); if (!b) return; restEnd = b.dataset.gr === 'skip' ? 0 : restEnd + 15000; if (!restEnd) box.querySelector('#gRest').innerHTML = ''; });
+    m._cleanup = () => { clearInterval(clock); setTimeout(render); };
     // Si anotas mientras entrenas, la duración sale del reloj (desde la primera serie que anotaste)
     const liveMin = () => (d.t0 && d.date === todayKey() ? Math.round((Date.now() - d.t0) / 60000) + 3 : 0);
     const minutes = () => d.minutes || (liveMin() >= 15 && liveMin() <= 240 ? liveMin() : gymAutoMinutes(d.items));
@@ -194,19 +208,21 @@ function openGymLog(wid) {
     const paintSession = () => {
       const last = id => { for (let i = state.workouts.length - 1; i >= 0; i--) { const w2 = state.workouts[i]; if (w2.id === d.wid) continue; const x = w2.ex.find(y => y.id === id); if (x) return { d: w2.d, sets: x.sets }; } return null; };
       box.innerHTML = `<h2 style="padding-right:30px">🏋️ ${d.wid ? 'Editar entrenamiento' : 'Ejercicios del gym'}</h2>
-        <p class="muted small" style="margin-top:-6px">${d.date === todayKey() ? 'Hoy' : prettyDate(d.date)} · anota el peso y las repeticiones de cada serie.</p>
+        <p class="muted small" style="margin-top:-6px">${d.date === todayKey() ? 'Hoy' : prettyDate(d.date)} · anota el peso y las repeticiones; marca ✓ al terminar cada serie.</p>
+        ${d.t0 && !d.wid && d.date === todayKey() ? '<div class="gym-live">⏱️ <b id="gEl"></b> <span class="muted small">entrenando</span></div>' : ''}
+        <div id="gRest"></div>
         ${d.items.map((x, i) => {
           const e = exById(x.id) || { n: 'Ejercicio', m: [], img: [] }, l = last(x.id);
           return `<div class="gym-ex">
             <div class="gym-ex-h">${exThumb(e)}<div class="info"><b>${esc(e.n)}</b><span class="muted small">${esc(e.m.slice(0, 2).join(', '))}${l ? ` · última vez ${shortDate(l.d)}: ${fmtSets(l.sets)}` : ''}</span><span data-gx-pr="${i}">${prTag(x)}</span></div><button class="icon-btn" data-gx-del="${i}" aria-label="Quitar ejercicio">✕</button></div>
             ${(() => { const nt = !d.wid && nextTarget(x.id); return nt ? `<div class="gym-tip"><span>💡 Hoy: <b>${nt.kg ? nt.kg + ' kg × ' : ''}${nt.reps}</b> <span class="muted small">· ${esc(nt.why)}</span></span><button class="btn sm ghost" data-gx-tip="${i}">Usar</button></div>` : ''; })()}
-            ${x.sets.length ? '<div class="gym-set head"><span>Serie</span><span>Anterior</span><span>kg</span><span>Reps</span><span></span></div>' : ''}
-            ${x.sets.map((z, k) => `<div class="gym-set"><span class="n">${k + 1}</span>
+            ${x.sets.length ? '<div class="gym-set head"><span>Serie</span><span>Anterior</span><span>kg</span><span>Reps</span><span>✓</span></div>' : ''}
+            ${x.sets.map((z, k) => `<div class="gym-set ${z.done ? 'done' : ''}"><span class="n">${k + 1}</span>
               <span class="prev">${l && l.sets[k] ? (l.sets[k].kg ? l.sets[k].kg + ' × ' : '') + l.sets[k].reps : '—'}</span>
               <input type="number" min="0" step="0.5" inputmode="decimal" value="${z.kg}" placeholder="0" data-gs-kg="${i}:${k}" aria-label="Kilos serie ${k + 1}">
               <input type="number" min="0" inputmode="numeric" value="${z.reps}" placeholder="0" data-gs-reps="${i}:${k}" aria-label="Repeticiones serie ${k + 1}">
-              <button class="icon-btn" data-gs-del="${i}:${k}" aria-label="Quitar serie">−</button></div>`).join('')}
-            <button class="see" data-gs-add="${i}">＋ Serie</button>
+              <button class="check-btn ${z.done ? 'on' : ''}" data-gs-done="${i}:${k}" aria-label="Serie ${k + 1} hecha">✓</button></div>`).join('')}
+            <div class="gym-set-acts"><button class="see" data-gs-add="${i}">＋ Serie</button>${x.sets.length ? `<button class="see" data-gs-del="${i}:${x.sets.length - 1}">− Quitar serie</button>` : ''}</div>
           </div>`;
         }).join('')}
         <button class="btn ghost" id="gAdd" style="width:100%;margin:6px 0 14px">＋ Agregar ejercicio</button>
@@ -229,6 +245,18 @@ function openGymLog(wid) {
       box.querySelectorAll('[data-gs-kg]').forEach(inp => inp.addEventListener('input', () => { const [i, k] = at(inp.dataset.gsKg); d.items[i].sets[k].kg = inp.value === '' ? '' : Number(inp.value); upd(); }));
       box.querySelectorAll('[data-gs-reps]').forEach(inp => inp.addEventListener('input', () => { const [i, k] = at(inp.dataset.gsReps); d.items[i].sets[k].reps = inp.value === '' ? '' : Number(inp.value); upd(); }));
       box.querySelectorAll('[data-gs-add]').forEach(b => b.addEventListener('click', () => { const s = d.items[b.dataset.gsAdd].sets, l = s[s.length - 1]; s.push(l ? { ...l } : { kg: '', reps: '' }); keep(); paint(); }));
+      // ✓ serie hecha: parte el cronómetro de la sesión (si no había partido) y el descanso
+      box.querySelectorAll('[data-gs-done]').forEach(b => b.addEventListener('click', () => {
+        const [i, k] = at(b.dataset.gsDone), z = d.items[i].sets[k];
+        z.done = !z.done;
+        if (z.done) {
+          if (!d.t0 && !d.wid) d.t0 = Date.now();
+          if (!(Number(z.reps) > 0)) { const pv = last(d.items[i].id); z.reps = (pv && pv.sets[k] && pv.sets[k].reps) || z.reps; }
+          if (!d.wid && d.date === todayKey()) restEnd = Date.now() + GYM_REST * 1000;
+          if (navigator.vibrate) navigator.vibrate(40);
+        }
+        keep(); paint();
+      }));
       box.querySelectorAll('[data-gs-del]').forEach(b => b.addEventListener('click', () => { const [i, k] = at(b.dataset.gsDel); d.items[i].sets.splice(k, 1); if (!d.items[i].sets.length) d.items.splice(i, 1); keep(); paint(); }));
       box.querySelectorAll('[data-gx-tip]').forEach(b => b.addEventListener('click', () => {
         const x = d.items[b.dataset.gxTip], nt = nextTarget(x.id);
