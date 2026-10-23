@@ -6,8 +6,8 @@ const AI_LOGIN = '<div class="hint-box">🔐 Para usar la IA, inicia sesión con
 function bindLogin(m) { const b = m.querySelector('[data-go-login]'); if (b) b.addEventListener('click', () => { closeModal(); go('perfil'); }); }
 
 // Pide a la IA una respuesta en JSON y la convierte en objeto
-async function aiJSON(prompt, { system, image, maxTokens = 2048 } = {}) {
-  const txt = await window.FitSync.ask({ message: prompt, system, image, json: true, maxTokens });
+async function aiJSON(prompt, { system, image, maxTokens = 2048, think, timeoutMs } = {}) {
+  const txt = await window.FitSync.ask({ message: prompt, system, image, json: true, maxTokens, ...(think ? { think } : {}), ...(timeoutMs ? { timeoutMs } : {}) });
   const s = String(txt).replace(/^```(?:json)?|```$/gm, '');
   const a = s.indexOf('{'), b = s.lastIndexOf('}');
   try { return JSON.parse(a >= 0 ? s.slice(a, b + 1) : s); } catch (e) { throw Object.assign(new Error('La IA respondió algo que no pude leer'), { code: 'parse' }); }
@@ -24,17 +24,34 @@ const spinner = txt => `<div class="ai-wait"><span class="msg model typing"><spa
 function aiFoodEntry(it) {
   const grams = num(it.grams, 3000);
   const n = norm(it.name || '').trim();
-  const f = n && allFoods().find(x => norm(x.name) === n || x.name.split('/').some(v => norm(v.replace(/\(.*?\)/g, '')).trim() === n));
+  // 1) La IA eligió un alimento de la base (valores USDA por gramo); 2) el nombre coincide exacto con uno de la base
+  const f = (it.id && foodById(String(it.id))) || (n && allFoods().find(x => norm(x.name) === n || x.name.split('/').some(v => norm(v.replace(/\(.*?\)/g, '')).trim() === n)));
+  const name = String(it.name || (f && f.name) || 'Alimento').slice(0, 80);
   if (f && grams) return { foodId: f.id, name: f.name, grams, ...nutrition(f, grams) };
-  return { name: String(it.name || 'Alimento').slice(0, 80), grams, kcal: num(it.kcal), p: num(it.p, 500), c: num(it.c, 800), g: num(it.g, 500) };
+  // 3) Valores por 100 g que estimó la IA (más consistentes al cambiar los gramos); 4) totales de la porción
+  if (grams && num(it.kcal100)) return { name, grams, kcal: num(it.kcal100) * grams / 100, p: num(it.p100, 100) * grams / 100, c: num(it.c100, 100) * grams / 100, g: num(it.g100, 100) * grams / 100 };
+  return { name, grams, kcal: num(it.kcal), p: num(it.p, 500), c: num(it.c, 800), g: num(it.g, 500) };
 }
-const FOOD_SYSTEM = `Eres un nutricionista experto en comida chilena y latinoamericana. Estimas porciones y nutrientes de forma realista.
-Responde SOLO con JSON con esta forma:
-{"items":[{"name":"Marraqueta","grams":100,"kcal":270,"p":8.5,"c":56,"g":1.5}],"meal":"desayuno|almuerzo|cena|snack|null","note":"comentario breve en español de Chile o vacío"}
-- Un item por alimento o bebida. kcal, p (proteína), c (carbohidratos) y g (grasas) son para la cantidad indicada en grams, NO por 100 g.
-- Usa nombres comunes en Chile (palta, marraqueta, porotos, quesillo, completo, once).
-- Si no dicen la cantidad, usa una porción típica. Si algo es dudoso, dilo en note.
-- meal: la comida del día si la mencionan; si no, null.`;
+// Instrucciones para estimar un plato con la mayor precisión posible, con la base de alimentos de la app como referencia
+let foodSystemTxt = null;
+function foodSystem() {
+  if (foodSystemTxt) return foodSystemTxt;
+  foodSystemTxt = `Eres un nutricionista experto en comida chilena y latinoamericana. Tu trabajo es estimar con la MAYOR PRECISIÓN posible los gramos, calorías y proteína de lo que la persona comió.
+MÉTODO (piénsalo antes de responder):
+1. Identifica cada componente por separado: proteína (carne, pollo, pescado, huevo), acompañamiento (arroz, papas, fideos, legumbres), verduras, pan, salsas, aderezos, bebidas.
+2. Estima los gramos de cada uno usando referencias de tamaño: un plato llano mide ~26 cm, un plato de postre ~20 cm, un tenedor ~19 cm, una cuchara sopera ~15 ml, una palma de mano ~100 g de carne, un puño ~1 taza (~150-180 g de arroz cocido). Considera el grosor y la altura de la comida, no solo el área.
+3. Considera la preparación: frito, apanado o salteado lleva aceite (agrega un item aparte "Aceite de cocción" con los gramos que estimes, normalmente 5-15 g por porción frita); mayonesa, palta, queso y salsas suman mucho y van como items separados.
+4. Para cada item, si calza con un alimento de la BASE (misma comida y misma preparación), pon su id: la app usará los valores exactos de la base. Si no calza, id null y entrega los valores por 100 g (kcal100, p100, c100, g100) de tablas nutricionales (USDA o tabla chilena).
+5. Si la persona da detalles o correcciones, respétalas por sobre lo que ves.
+Responde SOLO con JSON:
+{"items":[{"name":"Pechuga de pollo a la plancha","id":"pollo","grams":150,"kcal100":165,"p100":31,"c100":0,"g100":3.6}],"dish":"nombre corto del plato","meal":"desayuno|almuerzo|cena|snack|null","confidence":"alta|media|baja","note":"qué supusiste o qué conviene confirmar, breve, en español de Chile"}
+- Un item por alimento o bebida. grams = gramos comidos de ese item (cocido, como se ve en el plato).
+- confidence: alta si se ve claro y es un plato común; baja si hay cosas tapadas, salsas o no se distingue bien.
+- meal: la comida del día si la mencionan o es evidente (ej: café con tostadas = desayuno); si no, null.
+BASE (id: nombre, valores por 100 g en la app):
+${FOODS.map(f => `${f.id}: ${f.name}`).join('\n')}`;
+  return foodSystemTxt;
+}
 function openAIFood(mode = 'texto') {
   if (!aiReady()) return openModal(`<h2>${mode === 'foto' ? '📸 Foto del plato' : '💬 Cuéntame qué comiste'}</h2>${AI_LOGIN}`, bindLogin);
   const speech = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -51,29 +68,36 @@ function openAIFood(mode = 'texto') {
     if (mode === 'foto') q('#afPhoto').addEventListener('change', async e => {
       const f = e.target.files[0]; e.target.value = '';
       if (!f) return;
-      const url = await shrinkImage(f, 1024);
+      const url = await shrinkImage(f, 1280); // más resolución = mejor estimación de porciones
       image = { data: url.split(',')[1], mimeType: 'image/jpeg' };
       q('#afPrev').src = url; q('#afPrev').hidden = false;
       run();
     });
     if (speech) bindMic(q('#afMic'), q('#afText'), speech);
-    const run = async () => {
+    // fix: corrección de la persona sobre el resultado anterior (se vuelve a calcular con la misma foto)
+    const run = async (fix, prev) => {
       const text = q('#afText').value.trim();
       if (mode === 'foto' && !image) return toast('Primero saca una foto');
       if (mode !== 'foto' && !text) return toast('Cuéntame qué comiste');
       q('#afGo').disabled = true;
-      q('#afOut').innerHTML = spinner(mode === 'foto' ? 'Mirando tu plato…' : 'Calculando…');
+      q('#afOut').innerHTML = spinner(fix ? 'Recalculando con tu corrección…' : mode === 'foto' ? 'Mirando tu plato con detalle… (puede tardar unos segundos)' : 'Calculando…');
       try {
-        const r = await aiJSON(mode === 'foto'
-          ? `Identifica los alimentos de esta foto y estima la cantidad de cada uno.${text ? ' Detalle de la persona: ' + text : ''}`
-          : `Esto comí: ${text}`, { system: FOOD_SYSTEM, image: mode === 'foto' ? image : undefined });
+        const hour = new Date().getHours();
+        const ask = (mode === 'foto'
+          ? `Analiza esta foto de mi comida: identifica cada alimento y estima sus gramos con precisión.${text ? ' Detalle que doy yo: ' + text : ''}`
+          : `Esto comí: ${text}`)
+          + ` (Son las ${hour}:00.)`
+          + (fix ? `\nTu estimación anterior fue: ${JSON.stringify(prev.map(x => ({ name: x.name, grams: r0(x.grams), kcal: r0(x.kcal) })))}.\nCORRECCIÓN DE LA PERSONA (respétala): ${fix}` : '');
+        const r = await aiJSON(ask, { system: foodSystem(), image: mode === 'foto' ? image : undefined, maxTokens: 4096, think: mode === 'foto' ? 'MEDIUM' : undefined, timeoutMs: mode === 'foto' ? 70000 : undefined });
         const items = (Array.isArray(r.items) ? r.items : []).map(aiFoodEntry).filter(x => x.kcal > 0);
         if (!items.length) { q('#afOut').innerHTML = '<div class="hint-box">No reconocí alimentos. Prueba describiéndolo con más detalle.</div>'; return; }
-        aiFoodReview(q('#afOut'), items, MEALS.some(x => x.id === r.meal) ? r.meal : ui.meal, r.note);
+        // La comida: la que diga la IA o, si no, la de la hora (si estás registrando hoy)
+        const meal = MEALS.some(x => x.id === r.meal) ? r.meal : currentDate === todayKey() ? guessMeal() : ui.meal;
+        aiFoodReview(q('#afOut'), items, meal, r.note, { dish: r.dish, confidence: r.confidence, onFix: f => run(f, items) });
       } catch (e) { q('#afOut').innerHTML = aiFail(e); }
       finally { q('#afGo').disabled = false; }
     };
-    q('#afGo').addEventListener('click', run);
+    q('#afGo').addEventListener('click', () => run());
   });
 }
 function bindMic(btn, input, Speech) {
@@ -90,37 +114,58 @@ function bindMic(btn, input, Speech) {
   });
 }
 // Revisión antes de guardar: se puede cambiar gramos (escala todo), quitar alimentos y elegir la comida
-function aiFoodReview(box, items, meal, note) {
+// Margen de error según la confianza de la IA
+const CONF = { alta: ['🟢', 'Confianza alta', 0.1], media: ['🟡', 'Confianza media', 0.2], baja: ['🔴', 'Confianza baja: revisa los gramos', 0.3] };
+function aiFoodReview(box, items, meal, note, { dish, confidence, onFix } = {}) {
+  const base = items.map(x => ({ ...x })); // para la porción (×0,5 … ×1,5) sobre lo estimado
+  let portion = 1;
+  const scale = k => { portion = k; items.forEach((x, i) => { ['grams', 'kcal', 'p', 'c', 'g'].forEach(f => { x[f] = base[i][f] * k; }); }); };
   const paint = () => {
-    const tot = k => items.filter(x => x.on !== false).reduce((a, x) => a + x[k], 0);
+    const on = items.filter(x => x.on !== false), tot = k => on.reduce((a, x) => a + x[k], 0);
+    const cf = CONF[confidence];
     box.innerHTML = `<div class="ai-result">
+      <div class="ai-total">
+        ${dish ? `<div class="muted small">${esc(String(dish).slice(0, 60))}</div>` : ''}
+        <div class="ai-total-row"><div><b>${r0(tot('kcal'))}</b><span>kcal</span></div><div class="prot"><b>${r0(tot('p'))} g</b><span>proteína</span></div><div><b>${r0(tot('c'))} g</b><span>carbos</span></div><div><b>${r0(tot('g'))} g</b><span>grasas</span></div></div>
+        ${cf ? `<div class="muted small">${cf[0]} ${cf[1]} · entre ${r0(tot('kcal') * (1 - cf[2]))} y ${r0(tot('kcal') * (1 + cf[2]))} kcal</div>` : ''}
+      </div>
+      <div class="row" style="margin:10px 0 4px"><span class="small"><b>Tamaño de la porción</b></span></div>
+      <div class="chips">${[[0.5, '½'], [0.75, '¾'], [1, 'Como en la foto'], [1.25, '+¼'], [1.5, '+½']].map(([k, l]) => `<button class="chip ${k === portion ? 'active' : ''}" data-ai-k="${k}">${l}</button>`).join('')}</div>
       <div class="list">${items.map((x, i) => `<div class="item ai-item ${x.on === false ? 'off' : ''}">
         <input type="checkbox" data-ai-on="${i}" ${x.on === false ? '' : 'checked'} aria-label="Incluir ${esc(x.name)}">
         <span class="fi sm">${entryIcon(x)}</span>
-        <div class="info"><div class="name">${esc(x.name)}${x.foodId ? ' <span class="muted small">· de la base</span>' : ''}</div><div class="muted small">P ${r0(x.p)} · C ${r0(x.c)} · G ${r0(x.g)}</div></div>
+        <div class="info"><div class="name">${esc(x.name)}${x.foodId ? ' <span class="muted small">· valores de la base</span>' : ''}</div><div class="muted small"><b style="color:var(--prot)">P ${r0(x.p)}</b> · C ${r0(x.c)} · G ${r0(x.g)}</div></div>
         <div class="field ai-g"><input type="number" min="1" inputmode="decimal" value="${r0(x.grams) || ''}" data-ai-g="${i}" aria-label="Gramos"><span class="unit-in">g</span></div>
         <span class="kcal">${r0(x.kcal)}</span></div>`).join('')}</div>
-      <div class="result-box"><b>${r0(tot('kcal'))} kcal</b> · P ${r0(tot('p'))} g · C ${r0(tot('c'))} g · G ${r0(tot('g'))} g</div>
       ${note ? `<p class="muted small">💡 ${esc(note)}</p>` : ''}
+      ${onFix ? `<details class="ai-fix"><summary>✏️ ¿Algo no está bien? Corrígelo y recalculo</summary>
+        <div class="search-row" style="margin-top:8px"><input id="aiFixTxt" placeholder='Ej: "el arroz era integral", "sin aceite", "eran 2 presas"'><button class="btn sm" id="aiFixGo">Recalcular</button></div></details>` : ''}
       <div class="meal-pick small-pick">${MEALS.map(x => `<button class="${x.id === meal ? 'on' : ''}" data-ai-meal="${x.id}">${MEAL_ICO[x.id]} ${x.name}</button>`).join('')}</div>
-      <button class="btn" id="aiSave" style="width:100%">Agregar ${items.filter(x => x.on !== false).length} a ${MEALS.find(x => x.id === meal).name.toLowerCase()}</button></div>`;
+      <button class="btn" id="aiSave" style="width:100%">Anotar en ${MEALS.find(x => x.id === meal).name.toLowerCase()}${currentDate === todayKey() ? '' : ' del ' + shortDate(currentDate)} · ${r0(tot('kcal'))} kcal</button></div>`;
     box.querySelectorAll('[data-ai-on]').forEach(c => c.addEventListener('change', () => { items[c.dataset.aiOn].on = c.checked; paint(); }));
+    box.querySelectorAll('[data-ai-k]').forEach(b => b.addEventListener('click', () => { scale(Number(b.dataset.aiK)); paint(); }));
     box.querySelectorAll('[data-ai-g]').forEach(inp => inp.addEventListener('change', () => {
-      const x = items[inp.dataset.aiG], g = num(inp.value, 3000);
+      const i = Number(inp.dataset.aiG), x = items[i], g = num(inp.value, 3000);
       if (!g) return;
       const k = x.grams ? g / x.grams : 1;
       ['kcal', 'p', 'c', 'g'].forEach(f => { x[f] = x[f] * k; });
+      x.grams = g;
+      // Un cambio a mano pasa a ser la nueva base de ese alimento para la porción
+      ['grams', 'kcal', 'p', 'c', 'g'].forEach(f => { base[i][f] = x[f] / portion; });
       // Se redibuja después: el cambio puede venir del blur de un toque en otro botón
-      x.grams = g; setTimeout(paint);
+      setTimeout(paint);
     }));
     box.querySelectorAll('[data-ai-meal]').forEach(b => b.addEventListener('click', () => { meal = b.dataset.aiMeal; paint(); }));
+    const fx = box.querySelector('#aiFixGo');
+    if (fx) fx.addEventListener('click', () => { const t = box.querySelector('#aiFixTxt').value.trim(); if (!t) return toast('Escribe qué corregir'); onFix(t); });
     box.querySelector('#aiSave').addEventListener('click', () => {
       const add = items.filter(x => x.on !== false);
       if (!add.length) return toast('Marca al menos un alimento');
-      day().foods.push(...add.map(({ on, ...x }) => ({ ...x, id: uid(), meal, ai: true })));
+      // Cada alimento queda como su propio registro en la comida elegida (se pueden editar después en Hoy)
+      day().foods.push(...add.map(({ on, ...x }) => ({ ...x, grams: r0(x.grams), kcal: r1(x.kcal), p: r1(x.p), c: r1(x.c), g: r1(x.g), id: uid(), meal, ai: true })));
       ui.meal = meal;
       save(); closeModal(); render(); tap();
-      toast(`✓ ${add.length} ${add.length === 1 ? 'alimento' : 'alimentos'} · ${r0(add.reduce((a, x) => a + x.kcal, 0))} kcal`);
+      toast(`✓ ${MEALS.find(x => x.id === meal).name}: ${r0(add.reduce((a, x) => a + x.kcal, 0))} kcal · ${r0(add.reduce((a, x) => a + x.p, 0))} g de proteína`);
     });
   };
   paint();

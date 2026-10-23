@@ -280,7 +280,7 @@
   const AI_TIMEOUT = 45000;
   const withTimeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => { const e = new Error('timeout: la IA tardó más de ' + ms / 1000 + ' s'); e.code = 'timeout'; rej(e); }, ms))]);
   // image: { data (base64), mimeType } para preguntar por una foto; json: la respuesta viene como JSON
-  async function ask({ history = [], message, system, onChunk, image, json, maxTokens = 1024, timeoutMs = AI_TIMEOUT }) {
+  async function ask({ history = [], message, system, onChunk, image, json, maxTokens = 1024, think = 'LOW', timeoutMs = AI_TIMEOUT }) {
     if (!fb || !fb.app) { const e = new Error('offline'); e.code = 'offline'; throw e; }
     if (!S.user) { const e = new Error('auth'); e.code = 'auth'; throw e; }
     aiMod = aiMod || await import(BASE + 'firebase-ai.js');
@@ -288,7 +288,7 @@
     const hist = history.map(h => ({ role: h.role === 'user' ? 'user' : 'model', parts: [{ text: h.text }] }));
     // Pensar poco (LOW) responde mucho más rápido; si un modelo no acepta la opción, se reintenta sin ella
     const base = { maxOutputTokens: maxTokens, ...(json ? { responseMimeType: 'application/json' } : {}) };
-    const configs = [{ thinkingConfig: { thinkingLevel: 'LOW' }, ...base }, base];
+    const configs = [{ thinkingConfig: { thinkingLevel: think }, ...base }, base];
     const msg = image ? [message, { inlineData: { data: image.data, mimeType: image.mimeType } }] : message;
     let lastErr = null;
     for (const model of AI_MODELS) {
