@@ -993,3 +993,41 @@ test('Etiqueta y productos con IA: crear alimento, producto sin código y foto q
   expect(last.message).toContain('"name":"Arroz blanco","grams":200');
   await expect(page.locator('#aiLeft')).toHaveCount(0); // ya se descontó
 });
+
+test('Respaldos: crear, recuperar lo que falta sin borrar y volver exactamente a una copia', async ({ page }) => {
+  // Nube simulada: la lista y las copias viven en memoria de la página
+  await page.evaluate(() => {
+    for (const [k, v] of [['enabled', true], ['user', { name: 'x', email: 'yo@mail.com' }], ['status', 'Sincronizado ✓']]) Object.defineProperty(window.FitSync.state, k, { get: () => v, set() {}, configurable: true });
+    const store = [];
+    window.FitSync.backups = {
+      list: async () => store.map(b => b.meta).sort((a, b) => b.created - a.created),
+      create: async reason => { const st = JSON.parse(JSON.stringify(state)); const meta = { id: 'b' + store.length, created: Date.now() + store.length, reason, days: Object.keys(st.days).length, foods: 0, workouts: st.workouts.length, chunks: 1 }; store.push({ meta, st }); return meta; },
+      load: async id => JSON.parse(JSON.stringify(store.find(b => b.meta.id === id).st)),
+    };
+    window.__bk = store;
+  });
+  await page.click('.hello [data-go=perfil]');
+  await page.click('#syncBk');
+  await page.click('#bkNew');
+  await expect(page.locator('.bk-item')).toHaveCount(1);
+  await expect(page.locator('.bk-item')).toContainText('Manual');
+  // Después del respaldo se pierde un día y se anota algo nuevo
+  const k = await page.evaluate(() => { const ks = Object.keys(state.days).sort(); delete state.days[ks[0]]; state.days[todayKey()].foods.push({ id: 'nuevo', name: 'Nuevo', kcal: 100, p: 1, c: 1, g: 1, meal: 'snack' }); save(); return ks[0]; });
+  await page.click('[data-bk=b0]');
+  await page.click('#rsMerge');
+  await expect(page.locator('#toast')).toContainText('recuperé 1 días');
+  let s = await state(page);
+  expect(s.days[k]).toBeTruthy();
+  expect((await today(page)).foods.some(f => f.id === 'nuevo')).toBe(true); // no se borró lo nuevo
+  expect(await page.evaluate(() => window.__bk.map(b => b.meta.reason))).toEqual(['manual', 'antes de restaurar']);
+  // Volver exactamente: lo nuevo se quita
+  await page.click('#syncBk');
+  await page.click('[data-bk=b0]');
+  await page.click('#rsExact');
+  await expect(page.locator('#toast')).toContainText('volvieron a esa copia');
+  expect((await today(page)).foods.some(f => f.id === 'nuevo')).toBe(false);
+  // Y la copia de "antes de restaurar" permite deshacerlo
+  await page.click('#syncBk');
+  await expect(page.locator('.bk-item')).toHaveCount(3);
+  await expect(page.locator('.bk-item').first()).toContainText('Antes de restaurar');
+});

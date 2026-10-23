@@ -239,6 +239,7 @@
         storeSynced();
       }
       await push();
+      setTimeout(autoBackup, 3000);
     } catch (e) { set({ status: 'Error al sincronizar' }); }
     unsubs.push(fb.onSnapshot(col, snap => {
       let dirty = false;
@@ -249,6 +250,52 @@
       if (dirty) schedulePush();
     }, () => set({ status: 'Sin conexión' })));
   }
+  // ---------- Respaldos en la nube ----------
+  // Una copia completa de tus datos por semana (y antes de restaurar). Se guardan las últimas 8.
+  //   users/{uid}/backups/{id}        → { created, size, days, workouts, reason, chunks }
+  //   users/{uid}/backupChunks/{id}_N → { data: trozo del JSON } (Firestore acepta hasta 1 MB por documento)
+  const BACKUP_KEEP = 8, CHUNK = 700000, WEEK = 7 * 86400000;
+  const bCol = () => pid() === 'p1' ? 'backups' : 'backups_' + pid();
+  const cCol = () => pid() === 'p1' ? 'backupChunks' : 'backupChunks_' + pid();
+  async function listBackups() {
+    if (!uid || !fb) return [];
+    const snap = await fb.getDocs(fb.collection(fb.db, 'users', uid, bCol()));
+    const out = [];
+    snap.forEach(d => out.push({ id: d.id, ...d.data() }));
+    return out.sort((a, b) => b.created - a.created);
+  }
+  async function backupNow(reason = 'manual') {
+    if (!uid || !fb) { const e = new Error('auth'); e.code = 'auth'; throw e; }
+    const st = getState(), json = JSON.stringify(st);
+    const id = new Date().toISOString().replace(/[:.]/g, '-') + '-' + Math.random().toString(36).slice(2, 6);
+    const n = Math.ceil(json.length / CHUNK) || 1;
+    for (let i = 0; i < n; i++) await fb.setDoc(fb.doc(fb.db, 'users', uid, cCol(), `${id}_${i}`), { data: json.slice(i * CHUNK, (i + 1) * CHUNK) });
+    const meta = { created: Date.now(), size: json.length, days: Object.keys(st.days || {}).length, foods: Object.values(st.days || {}).reduce((a, d) => a + (d.foods || []).length, 0), workouts: (st.workouts || []).length, reason, chunks: n, dev };
+    await fb.setDoc(fb.doc(fb.db, 'users', uid, bCol(), id), meta);
+    // Se borran las copias más antiguas (las de "antes de restaurar" también cuentan)
+    const all = await listBackups();
+    for (const b of all.slice(BACKUP_KEEP)) {
+      for (let i = 0; i < (b.chunks || 1); i++) await fb.deleteDoc(fb.doc(fb.db, 'users', uid, cCol(), `${b.id}_${i}`));
+      await fb.deleteDoc(fb.doc(fb.db, 'users', uid, bCol(), b.id));
+    }
+    return { id, ...meta };
+  }
+  async function loadBackup(id) {
+    const meta = (await fb.getDoc(fb.doc(fb.db, 'users', uid, bCol(), id))).data();
+    let json = '';
+    for (let i = 0; i < (meta.chunks || 1); i++) json += (await fb.getDoc(fb.doc(fb.db, 'users', uid, cCol(), `${id}_${i}`))).data().data;
+    return JSON.parse(json);
+  }
+  // Una vez por semana, después de sincronizar (solo si hay datos)
+  async function autoBackup() {
+    try {
+      const st = getState();
+      if (!st.profile && !Object.keys(st.days || {}).length) return;
+      const last = (await listBackups())[0];
+      if (!last || Date.now() - last.created >= WEEK) await backupNow('semanal');
+    } catch (e) { /* se intentará la próxima vez */ }
+  }
+
   // Vuelve a leer la nube y envía lo pendiente (al volver a la app o con el botón "Sincronizar ahora").
   // Cubre los casos en que el aviso en vivo se cortó, por ejemplo con el PC suspendido o el teléfono sin señal.
   async function refresh() {
@@ -307,7 +354,7 @@
       const a = app.initializeApp(cfg);
       fb = {
         app: a, auth: auth.getAuth(a), db: fs.getFirestore(a), doc: fs.doc, collection: fs.collection, getDoc: fs.getDoc, getDocs: fs.getDocs,
-        setDoc: fs.setDoc, onSnapshot: fs.onSnapshot, runTransaction: fs.runTransaction,
+        setDoc: fs.setDoc, deleteDoc: fs.deleteDoc, onSnapshot: fs.onSnapshot, runTransaction: fs.runTransaction,
         GoogleAuthProvider: auth.GoogleAuthProvider, signInWithPopup: auth.signInWithPopup, signOut: auth.signOut,
       };
       auth.onAuthStateChanged(fb.auth, u => {
@@ -384,7 +431,8 @@
     async signOut() { if (fb) await fb.signOut(fb.auth); },
     ask,
     syncNow: refresh,
-    _test: { inject: f => { fb = f; }, injectAI: m => { aiMod = m; }, setUser: u => { S.user = u; }, start, push, refresh, getSynced: () => synced },
+    backups: { list: listBackups, create: backupNow, load: loadBackup },
+    _test: { inject: f => { fb = f; }, injectAI: m => { aiMod = m; }, setUser: u => { S.user = u; }, start, push, refresh, autoBackup, getSynced: () => synced },
   };
   init();
 })();

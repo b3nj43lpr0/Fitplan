@@ -19,6 +19,7 @@ function fakeFb() {
       return { size: docs.length, forEach: f => docs.forEach(f) };
     },
     setDoc: async (r, d) => { DB[r.path] = d; notify(r.path); },
+    deleteDoc: async r => { delete DB[r.path]; },
     runTransaction: async (db, fn) => {
       // Como Firestore: si un documento leído cambió antes de escribir, se reintenta
       let writes;
@@ -133,6 +134,17 @@ const ok = (c, msg) => { console.log((c ? 'OK  ' : 'FAIL') + ' ' + msg); if (!c)
   ok(P2.state.profile.nombre === 'Sofía' && !P2.state.days['2026-10-20'], 'perfil 2 no recibe los datos del perfil 1');
   ok(Object.keys(DB).some(k => k.startsWith('users/u1/parts_p2/')), 'perfil 2 guarda en su propia colección');
   ok(A.state.profile.nombre === 'Benjamín' && !A.state.days['2026-10-21'].foods.some(f => f.id === 's1'), 'perfil 1 no recibe los datos del perfil 2');
+  // Respaldos: copia completa en trozos, se lee igual, se guardan las últimas 8 y el automático es semanal
+  const bk = await A.api.backups.create('manual');
+  const back = await A.api.backups.load(bk.id);
+  ok(JSON.stringify(back) === JSON.stringify(A.state) && bk.days === Object.keys(A.state.days).length, 'respaldo: se guarda y se recupera igual');
+  for (let i = 0; i < 9; i++) await A.api.backups.create('manual');
+  const all = await A.api.backups.list();
+  ok(all.length === 8 && Object.keys(DB).filter(k => k.startsWith('users/u1/backupChunks/')).length === 8, 'respaldo: quedan las últimas 8 (con sus trozos)');
+  const n0 = all.length;
+  await A.api._test.autoBackup();
+  ok((await A.api.backups.list()).length === n0 && (await A.api.backups.list())[0].created === all[0].created, 'respaldo semanal: no se repite si hay uno de esta semana');
+  ok(!Object.keys(DB).some(k => k.startsWith('users/u1/backups_p2/')), 'respaldo: cada perfil en su propia colección');
   // Modo antiguo si las reglas no permiten la subcolección
   denyParts = true;
   const C = device('C', { profile: { nombre: 'X' }, days: {}, workouts: [], _ts: 0 });

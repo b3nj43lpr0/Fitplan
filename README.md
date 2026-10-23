@@ -94,6 +94,14 @@ En Entrenar → Actividad → **🏋️ Registrar ejercicios del gym**:
 - **Revisión semanal**: el resumen del lunes trae el análisis del coach (qué hiciste bien, qué falló y una meta). Se pide una sola vez por semana y queda también en el chat del coach.
 - **Récords**: aviso en vivo cuando una serie supera tu mejor marca; en Progreso → Fuerza ves los récords del mes y, por ejercicio, 1RM, peso máximo, más repeticiones y mejor volumen con su gráfico.
 
+## Respaldos en la nube
+
+Con sesión iniciada, cada semana se guarda sola una copia completa de tus datos en Firestore (`users/{uid}/backups` y `backupChunks`, en trozos de 700 KB porque cada documento admite hasta 1 MB). Se mantienen las últimas 8 copias. En Perfil → Sincronización → 🛡️ Respaldos puedes crear una copia cuando quieras y recuperar cualquiera de dos formas:
+- **Recuperar lo que falta** (recomendado): suma los días, comidas, entrenamientos, pesos y alimentos de la copia sin borrar nada.
+- **Volver exactamente a esa copia**: todo queda como en esa fecha.
+
+Antes de recuperar se guarda una copia de cómo estaba todo, por si te arrepientes. Las reglas de Firestore del README ya cubren estas colecciones.
+
 ## Varias personas en el mismo teléfono
 
 Toca tu inicial en Hoy (o Perfil → Personas en este teléfono) para agregar a alguien o cambiar de persona. Cada una tiene sus propias comidas, rutina, progreso, entrenamiento en curso y fotos. Con la sincronización, cada perfil se guarda en su propio espacio dentro de la misma cuenta de Google.
