@@ -84,8 +84,9 @@ function syncCardHtml() {
   if (!S || !S.enabled) return `<h2>Sincronización</h2><p class="muted small" style="margin-top:-6px">Aún no está configurada. Mientras tanto, usa Exportar e Importar para pasar tus datos entre dispositivos.</p>`;
   return `<h2>Sincronización</h2>
     <p class="muted small" style="margin-top:-6px">${S.user ? `Sesión: <b>${esc(S.user.email || S.user.name || '')}</b>. Tus datos se comparten entre todos tus dispositivos.` : 'Inicia sesión con Google para tener tus datos igual en el PC y en el teléfono.'}</p>
-    <p class="small" id="syncStatus">${esc(S.status)}</p>
-    <div class="btn-row">${S.user ? '<button class="btn ghost sm" id="syncOut">Cerrar sesión</button>' : '<button class="btn sm" id="syncIn">Iniciar sesión con Google</button>'}</div>`;
+    <p class="small" id="syncStatus">${esc(S.status)}${S.last ? ` <span class="muted">· ${new Date(S.last).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}</span>` : ''}</p>
+    ${S.user ? `<p class="muted small">Perfil que se sincroniza: <b>${esc((profilesIndex().list.find(x => x.id === PROFILE_ID) || {}).name || state.profile && state.profile.nombre || 'principal')}</b>${PROFILE_ID === 'p1' ? ' (principal)' : ' (secundario: en el otro dispositivo elige este mismo perfil)'}. Para ver lo mismo en el PC y el teléfono, usa la misma cuenta de Google y el mismo perfil en ambos.</p>` : ''}
+    <div class="btn-row">${S.user ? '<button class="btn sm" id="syncNow">🔄 Sincronizar ahora</button><button class="btn ghost sm" id="syncBk">🛡️ Respaldos</button><button class="btn ghost sm" id="syncOut">Cerrar sesión</button>' : '<button class="btn sm" id="syncIn">Iniciar sesión con Google</button>'}</div>`;
 }
 let offSync = null;
 bind.perfil = () => {
@@ -109,6 +110,10 @@ bind.perfil = () => {
     const i = $('#syncIn'), o = $('#syncOut');
     if (i) i.addEventListener('click', () => window.FitSync.signIn());
     if (o) o.addEventListener('click', () => window.FitSync.signOut());
+    const bk = $('#syncBk');
+    if (bk) bk.addEventListener('click', openBackups);
+    const n = $('#syncNow');
+    if (n) n.addEventListener('click', async () => { n.disabled = true; await window.FitSync.syncNow(); toast(window.FitSync.state.status); render(); });
   };
   paint();
   if (offSync) offSync();
@@ -157,3 +162,80 @@ bind.perfil = () => {
     save(); render();
   });
 };
+
+// ---------- Respaldos en la nube ----------
+// Recuperar lo que falta: suma al estado actual los días, comidas, entrenamientos y listas de la copia, sin borrar nada
+function mergeBackup(cur, bk) {
+  const id = i => i.id || JSON.stringify(i);
+  const join = (a = [], b = [], key = id) => [...a, ...b.filter(x => !a.some(y => key(y) === key(x)))];
+  const days = { ...cur.days };
+  for (const [k, d] of Object.entries(bk.days || {})) {
+    const c = days[k];
+    days[k] = !c ? d : { ...d, ...c, foods: join(c.foods, d.foods), exercises: join(c.exercises, d.exercises), water: Math.max(c.water || 0, d.water || 0) };
+  }
+  return {
+    ...cur, days,
+    workouts: join(cur.workouts, bk.workouts).sort((a, b) => (a.d < b.d ? -1 : 1)),
+    weights: join(cur.weights, bk.weights, w => w.d).sort((a, b) => (a.d < b.d ? -1 : 1)),
+    measures: join(cur.measures, bk.measures, m => m.d),
+    customFoods: join(cur.customFoods, bk.customFoods), customRecipes: join(cur.customRecipes, bk.customRecipes),
+    customExercises: join(cur.customExercises, bk.customExercises), combos: join(cur.combos, bk.combos),
+    challenges: join(cur.challenges, bk.challenges, c => c.id + c.start),
+    badges: [...new Set([...(cur.badges || []), ...(bk.badges || [])])], favFoods: [...new Set([...(cur.favFoods || []), ...(bk.favFoods || [])])],
+    profile: cur.profile || bk.profile, routine: cur.routine || bk.routine,
+  };
+}
+const fmtBackupDate = t => new Date(t).toLocaleString('es', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+function openBackups() {
+  const B = window.FitSync && window.FitSync.backups;
+  if (!B || !window.FitSync.state.user) return toast('Inicia sesión con Google para usar los respaldos');
+  openModal(`<h2>🛡️ Respaldos en la nube</h2>
+    <p class="muted small" style="margin-top:-6px">Cada semana se guarda solo una copia completa de tus datos (se mantienen las últimas 8). Si algo se borró o se pisó, recupéralo desde aquí.</p>
+    <button class="btn ghost" id="bkNew" style="width:100%">＋ Crear respaldo ahora</button>
+    <div id="bkList">${'<p class="muted">Cargando respaldos…</p>'}</div>`, async m => {
+    const box = m.querySelector('#bkList');
+    const paint = async () => {
+      let list;
+      try { list = await B.list(); } catch (e) { box.innerHTML = '<div class="hint-box">No pude leer los respaldos. Revisa tu conexión.</div>'; return; }
+      box.innerHTML = list.length ? `<div class="list">${list.map(b => `<div class="item bk-item">
+          <div class="info"><div class="name">${esc(fmtBackupDate(b.created))}</div>
+          <div class="muted small">${b.reason === 'semanal' ? 'Automático' : b.reason === 'antes de restaurar' ? 'Antes de restaurar' : 'Manual'} · ${b.days} días · ${b.foods || 0} comidas · ${b.workouts} entrenamientos</div></div>
+          <button class="btn sm" data-bk="${b.id}">Recuperar</button></div>`).join('')}</div>`
+        : '<p class="muted small">Aún no hay respaldos. El primero se crea solo al sincronizar, o tócale "Crear respaldo ahora".</p>';
+      box.querySelectorAll('[data-bk]').forEach(btn => btn.addEventListener('click', () => chooseRestore(list.find(x => x.id === btn.dataset.bk))));
+    };
+    m.querySelector('#bkNew').addEventListener('click', async e => {
+      e.target.disabled = true; e.target.textContent = 'Guardando…';
+      try { await B.create('manual'); toast('Respaldo guardado ✓'); await paint(); } catch (err) { toast('No pude guardar el respaldo'); }
+      e.target.disabled = false; e.target.textContent = '＋ Crear respaldo ahora';
+    });
+    await paint();
+  });
+}
+function chooseRestore(b) {
+  const B = window.FitSync.backups;
+  openModal(`<h2>Recuperar respaldo</h2>
+    <p class="muted small" style="margin-top:-6px">${esc(fmtBackupDate(b.created))} · ${b.days} días · ${b.foods || 0} comidas · ${b.workouts} entrenamientos</p>
+    <button class="btn" id="rsMerge" style="width:100%">Recuperar lo que falta</button>
+    <p class="muted small">Suma a lo que tienes ahora los días, comidas, entrenamientos, pesos y alimentos de esa copia. No borra nada. <b>Recomendado.</b></p>
+    <button class="btn ghost" id="rsExact" style="width:100%">Volver exactamente a esta copia</button>
+    <p class="muted small">Todo queda como estaba en esa fecha; lo anotado después se quita. Antes se guarda un respaldo de cómo está ahora, por si te arrepientes.</p>
+    <p class="small" id="rsStatus"></p>`, m => {
+    const st = t => { m.querySelector('#rsStatus').textContent = t; };
+    const go = async exact => {
+      m.querySelectorAll('button').forEach(x => { x.disabled = true; });
+      try {
+        st('Guardando un respaldo de cómo está ahora…');
+        await B.create('antes de restaurar');
+        st('Descargando la copia…');
+        const bk = await B.load(b.id);
+        const before = Object.keys(state.days).length;
+        state = exact ? { ...EMPTY(), ...bk } : mergeBackup(state, bk);
+        save(); closeModal(); render();
+        toast(exact ? 'Listo: tus datos volvieron a esa copia' : `Listo: recuperé ${Math.max(0, Object.keys(state.days).length - before)} días que faltaban y lo que faltaba en los demás`);
+      } catch (e) { st('No pude recuperarlo. Revisa tu conexión e inténtalo de nuevo.'); m.querySelectorAll('button').forEach(x => { x.disabled = false; }); }
+    };
+    m.querySelector('#rsMerge').addEventListener('click', () => go(false));
+    m.querySelector('#rsExact').addEventListener('click', () => { if (confirm('¿Volver exactamente a esa copia? Lo anotado después se quitará (queda un respaldo de ahora).')) go(true); });
+  });
+}
