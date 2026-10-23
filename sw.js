@@ -1,5 +1,5 @@
 // Service worker: permite usar la app sin conexión una vez instalada
-const CACHE = 'fitplan-v34';
+const CACHE = 'fitplan-v35';
 // Imágenes de ejercicios, librería de Firebase y fuentes: no cambian, así que viven en su propia caché
 // y sobreviven a las actualizaciones de la app
 const STATIC = 'fitplan-static-v1';

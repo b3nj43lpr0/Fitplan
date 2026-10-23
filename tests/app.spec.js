@@ -1171,3 +1171,21 @@ test('UX: deslizar para borrar un alimento y para cerrar una ventana', async ({ 
   await swipe(page, '.modal h2', 0, 200);
   await expect(page.locator('.modal')).toHaveCount(0);
 });
+
+test('PC: Registrar y Buscar en la barra lateral, calendario en una fila y Hoy en dos columnas', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await expect(page.locator('#fab')).toBeHidden();
+  await page.click('#navAdd');
+  await expect(page.locator('.qa-tile')).toHaveCount(8);
+  await page.keyboard.press('Escape');
+  await page.click('#navFind');
+  await page.fill('#gsQ', 'compras');
+  await expect(page.locator('[data-gs-place]').first()).toBeVisible();
+  await page.keyboard.press('Escape');
+  const strip = await page.locator('.weekstrip').boundingBox();
+  expect(strip.height).toBeLessThan(120);
+  expect(await page.locator('.hoy-cards').evaluate(e => getComputedStyle(e).columnCount)).toBe('2');
+  // Con el zoom, la barra lateral calza justo con la pantalla
+  const nav = await page.locator('.nav').boundingBox();
+  expect(nav.height).toBeLessThanOrEqual(901);
+});

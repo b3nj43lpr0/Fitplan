@@ -37,6 +37,14 @@ fab.className = 'fab'; fab.id = 'fab'; fab.setAttribute('aria-label', 'Registrar
 fab.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>';
 fab.addEventListener('click', openQuickAdd);
 document.body.appendChild(fab);
+// En el PC el botón flotante se cambia por "Registrar" y "Buscar" arriba en la barra lateral
+const navActs = document.createElement('div');
+navActs.className = 'nav-actions';
+navActs.innerHTML = `<button class="nav-add" id="navAdd" title="Registrar">${fab.innerHTML}<span>Registrar</span></button>
+  <button class="nav-find" id="navFind" title="Buscar en toda la app">${ICON.search}<span>Buscar</span></button>`;
+$('.nav .brand').after(navActs);
+$('#navAdd').addEventListener('click', openQuickAdd);
+$('#navFind').addEventListener('click', () => openGlobalSearch());
 
 // ---------- Buscador global: alimentos, recetas, ejercicios y secciones de la app ----------
 // Cada sección con palabras con que alguien la buscaría, para que cualquiera encuentre todo
