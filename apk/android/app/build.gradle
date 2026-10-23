@@ -1,5 +1,8 @@
 apply plugin: 'com.android.application'
 
+// GitHub Actions pasa el número de compilación para que cada APK nueva se instale encima de la anterior
+def buildNumber = (System.getenv('VERSION_CODE') ?: '1').toInteger()
+
 android {
     namespace = "cl.fitplan.app"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -7,9 +10,8 @@ android {
         applicationId "cl.fitplan.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        // GitHub Actions pasa el número de compilación para que cada APK nueva se instale encima de la anterior
-        versionCode (System.getenv('VERSION_CODE') ?: '1').toInteger()
-        versionName "1.${System.getenv('VERSION_CODE') ?: '0'}"
+        versionCode buildNumber
+        versionName "1.${buildNumber}"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
