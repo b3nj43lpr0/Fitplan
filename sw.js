@@ -1,9 +1,9 @@
 // Service worker: permite usar la app sin conexión una vez instalada
-const CACHE = 'fitplan-v33';
+const CACHE = 'fitplan-v34';
 // Imágenes de ejercicios, librería de Firebase y fuentes: no cambian, así que viven en su propia caché
 // y sobreviven a las actualizaciones de la app
 const STATIC = 'fitplan-static-v1';
-const FILES = ['./', './index.html', './styles.css', './js/core.js', './js/hoy.js', './js/comidas.js', './js/etiqueta.js', './js/actividad.js', './js/gym.js', './js/recetas.js', './js/entrenar.js', './js/progreso.js', './js/perfil.js', './js/coach.js', './js/ia.js', './js/ux.js', './js/main.js', './sync.js', './firebase-config.js', './data.js', './foods.js', './exercises.js', './vendor/zxing.min.js', './manifest.json', './icon.svg'];
+const FILES = ['./', './index.html', './styles.css', './js/core.js', './js/hoy.js', './js/comidas.js', './js/etiqueta.js', './js/actividad.js', './js/gym.js', './js/recetas.js', './js/entrenar.js', './js/progreso.js', './js/perfil.js', './js/coach.js', './js/ia.js', './js/ux.js', './js/emoji.js', './js/main.js', './sync.js', './firebase-config.js', './data.js', './foods.js', './exercises.js', './vendor/zxing.min.js', './manifest.json', './icon.svg'];
 const IMMUTABLE = ['https://raw.githubusercontent.com/RepDB/', 'https://www.gstatic.com/firebasejs/', 'https://fonts.gstatic.com/'];
 
 self.addEventListener('install', e => {
@@ -43,6 +43,8 @@ self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
   const url = new URL(e.request.url);
   if (IMMUTABLE.some(p => url.href.startsWith(p))) return e.respondWith(cacheFirst(e.request));
+  // Emojis 3D: se guardan la primera vez que se ven
+  if (url.origin === location.origin && url.pathname.includes('/emoji/')) return e.respondWith(cacheFirst(e.request));
   if (url.origin === location.origin) return e.respondWith(networkFirst(e.request, CACHE));
   if (url.origin === 'https://fonts.googleapis.com') return e.respondWith(networkFirst(e.request, STATIC));
 });
