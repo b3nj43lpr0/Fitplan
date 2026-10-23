@@ -811,3 +811,8 @@ button.avatar { border: 0; cursor: pointer; font-family: inherit; }
 .ai-total-row .prot b { color: var(--prot); }
 .ai-fix { margin: 10px 0; font-size: 14px; }
 .ai-fix summary { cursor: pointer; color: var(--accent); font-weight: 600; }
+.gym-tip { display: flex; align-items: center; gap: 8px; justify-content: space-between; background: color-mix(in srgb, var(--accent) 9%, transparent); border-radius: 12px; padding: 7px 10px; margin: 2px 0 6px; font-size: 14px; }
+.real-tdee .tag { background: var(--accent); color: #fff; }
+.tip-card { display: flex; gap: 10px; align-items: flex-start; background: var(--card); border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); border-radius: 18px; padding: 12px 12px 12px 14px; margin: 0 0 14px; font-size: 14.5px; line-height: 1.45; }
+.tip-ico { font-size: 22px; line-height: 1; }
+.tip-txt { flex: 1; }

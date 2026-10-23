@@ -63,13 +63,22 @@ Toca 💬 en Hoy (o Progreso → Resumen) para preguntarle cosas como "¿qué hi
 
 Para activarlo: Firebase → Compilación → **AI Logic** → Comenzar → elige **Gemini Developer API** (la opción sin costo) → Activar. Si App Check está aplicado para AI Logic, desactívalo en Seguridad → App Check → APIs → Firebase AI Logic → Dejar de aplicar (la app no usa App Check; el coach exige sesión iniciada). Luego inicia sesión con Google en Perfil → Sincronización: el coach con IA solo funciona con sesión iniciada. Sin conexión, sin sesión o si se acaba la cuota gratis, responde un coach básico que analiza tus números sin IA.
 
+## Gasto real (TDEE adaptativo)
+
+La fórmula de Mifflin-St Jeor es un promedio de la población. Con 10 o más días bien registrados (en las últimas 4 semanas) y 3 pesajes que cubran 10 días o más, la app mide tu gasto real: lo que comes en promedio menos lo que cambia tu peso (7.700 kcal por kg), sin contar el ejercicio anotado, que se suma aparte. Mientras haya pocos datos, el resultado se mezcla con la fórmula según la confianza. Cuando difiere en 100 kcal o más, Hoy te ofrece usarlo; se puede activar o volver a la fórmula en Progreso → Peso. Con el gasto real en uso, el ajuste semanal antiguo no se suma.
+
+## Consejo del día
+
+En Hoy aparece un consejo concreto con tus números (proteína que falta, calorías, agua). Con la IA se escribe uno nuevo en la mañana, la tarde y la noche (↻ pide otro); sin IA se calcula en el teléfono.
+
 ## Registrar ejercicios del gimnasio
 
 En Entrenar → Actividad → **🏋️ Registrar ejercicios del gym**:
 - Eliges los ejercicios por músculo (pecho, espalda, hombros, bíceps, tríceps, antebrazo, cuádriceps, femoral, glúteos, pantorrillas, abdomen, cuerpo completo), por equipo (máquina, barra, mancuernas, polea, peso corporal) o buscando con los nombres del gimnasio ("press francés", "cruce de poleas", "jalón", "prensa 45", "femoral"…). Primero salen los que ya hiciste y los más comunes.
 - La biblioteca tiene más de 700 ejercicios: los de RepDB más 60 de máquinas y variantes comunes en gimnasios (`EXTRA_EXERCISES` en `data.js`).
 - Por cada ejercicio anotas las series con kg × repeticiones (parte con lo que hiciste la última vez). Te avisa si una serie es récord.
-- Calcula las calorías con tu peso, el tipo de ejercicios, la duración y la intensidad. Se guarda como actividad del día (suma a tu presupuesto de calorías) y como entrenamiento con series (récords y gráficos de fuerza).
+- **Peso sugerido para hoy** (progresión doble 8-12): si la última vez llegaste a 12 repeticiones en todas las series, sube el peso (2,5 kg con barra o máquina, 2 kg con mancuernas); si no, mismo peso y una repetición más. "Usar" llena las series.
+- Calcula las calorías con el tiempo en serie (≈4 s por repetición) al gasto del ejercicio y el resto de la sesión como descanso activo, más un 10 % de gasto posterior; la intensidad las ajusta. Si anotas mientras entrenas, la duración sale del reloj desde tu primera serie. Se guarda como actividad del día (suma a tu presupuesto de calorías) y como entrenamiento con series (récords y gráficos de fuerza).
 - Si cierras sin guardar, queda como borrador. Con ✏️ editas una sesión guardada y con ✕ la borras (con deshacer).
 
 ### Más funciones con la misma IA

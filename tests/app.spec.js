@@ -842,3 +842,97 @@ test('Foto del plato: base de alimentos, valores por 100 g, porción, rango y co
   expect(fs[0].foodId).toBe('pollo');
   await expect(page.locator('#toast')).toContainText('843 kcal');
 });
+
+test('Gasto real: se mide con comidas y peso, se ofrece en Hoy y cambia la meta', async ({ page }) => {
+  // 21 días comiendo 2.000 kcal y bajando 0,5 kg/semana → gasto ≈ 2.000 + 0,5 × 7.700 / 7 = 2.550
+  await page.evaluate(() => {
+    state.days = {}; state.weights = [];
+    for (let i = 1; i <= 21; i++) {
+      const k = shiftKey(todayKey(), -i);
+      state.days[k] = { foods: [{ id: 'a' + i, name: 'a', meal: 'almuerzo', kcal: 1200, p: 80, c: 100, g: 40 }, { id: 'b' + i, name: 'b', meal: 'cena', kcal: 800, p: 50, c: 60, g: 30 }], exercises: [], water: 8 };
+      if (i % 3 === 0) state.weights.push({ d: k, kg: Math.round((80 + i * 0.5 / 7) * 10) / 10 });
+    }
+    state.weights.push({ d: todayKey(), kg: 80 });
+    state.profile.gastoReal = false; state.profile.gastoRealNo = null;
+    save();
+  });
+  await page.reload();
+  const r = await page.evaluate(() => realTdee());
+  expect(r.ready).toBe(true);
+  expect(r.measured).toBeGreaterThan(2450);
+  expect(r.measured).toBeLessThan(2650);
+  expect(r.conf).toBe(1);
+  // Antes de aceptarlo, la meta sigue con la fórmula; Hoy ofrece usarlo
+  const before = await page.evaluate(() => Math.round(calcTargets().kcal));
+  await expect(page.locator('.nudge').first()).toContainText('Medí tu gasto real');
+  await page.click('[data-nudge=gasto]');
+  await page.click('#rtYes');
+  const tg = await page.evaluate(() => calcTargets());
+  expect(tg.real).toBe(true);
+  expect(Math.round(tg.tdee)).toBe(Math.round(r.v));
+  expect(Math.round(tg.kcal)).not.toBe(before);
+  await expect(page.locator('.hero')).toContainText('Meta según tu gasto real');
+  // En Progreso → Peso se ve y se puede volver a la fórmula
+  await page.click('[data-view=progreso]');
+  await page.click('[data-tab-prog=peso]');
+  await expect(page.locator('.real-tdee')).toContainText('En uso');
+  await page.click('#rtToggle');
+  expect(await page.evaluate(() => calcTargets().real)).toBe(false);
+  // Con pocos datos dice qué falta
+  await page.evaluate(() => { state.days = {}; save(); render(); });
+  await expect(page.locator('.real-tdee')).toContainText('me falta');
+});
+
+test('Gym: peso sugerido para hoy, calorías por tiempo en serie y duración real', async ({ page }) => {
+  await page.click('[data-view=rutinas]');
+  await page.click('[data-tab-rut=actividad]');
+  // Última vez en press de banca (fixture): 60 × 10 y 60 × 9 → mismo peso, 10 reps
+  expect(await page.evaluate(() => loadExercises().then(() => nextTarget('bench-press')))).toMatchObject({ kg: 60, reps: 10 });
+  // Si llegó a 12 en todas, sube 2,5 kg y vuelve a 8
+  expect(await page.evaluate(() => { state.workouts.push({ id: 'w', d: todayKey(), name: 'x', minutes: 40, ex: [{ id: 'bench-press', sets: [{ kg: 60, reps: 12 }, { kg: 60, reps: 12 }] }] }); return nextTarget('bench-press'); })).toMatchObject({ kg: 62.5, reps: 8, sets: 2 });
+  await page.evaluate(() => { state.workouts.pop(); });
+  await page.click('#gymLog');
+  await page.fill('#gQ', 'press banca barra');
+  await page.click('[data-gp="bench-press"]');
+  await page.click('#gDone');
+  await expect(page.locator('.gym-tip')).toContainText('60 kg × 10');
+  await page.click('[data-gx-tip="0"]');
+  await expect(page.locator('[data-gs-reps="0:0"]')).toHaveValue('10');
+  await expect(page.locator('[data-gs-reps="0:1"]')).toHaveValue('10');
+  // Calorías: una hora con 18 series no cuenta como 60 min levantando sin parar
+  const k = await page.evaluate(() => {
+    const items = [{ id: 'bench-press', sets: Array.from({ length: 18 }, () => ({ kg: 60, reps: 10 })) }];
+    return { hora: gymKcal(items, 60), intensa: gymKcal(items, 60, 'intensa'), sinPausa: burnedKcal(5, 60) };
+  });
+  expect(k.hora).toBeLessThan(k.sinPausa);
+  expect(k.hora).toBeGreaterThan(150);
+  expect(k.intensa).toBeGreaterThan(k.hora);
+  // Duración real: desde la primera serie anotada
+  await page.evaluate(() => { const d = gymDraft(); d.t0 = Date.now() - 47 * 60000; storeGymDraft(d); });
+  await page.click('.modal-x');
+  await page.click('#gymLog');
+  await expect(page.locator('.gym-foot')).toContainText('Llevas 50 min');
+  await expect(page.locator('#gMin')).toHaveValue('50');
+});
+
+test('Consejo del día en Hoy: calculado sin IA y con IA una vez por momento del día', async ({ page }) => {
+  await expect(page.locator('.tip-card')).toBeVisible();
+  const basic = await page.evaluate(() => basicTip());
+  await expect(page.locator('#dayTip')).toHaveText(basic);
+  await fakeAI(page);
+  await page.evaluate(() => { window.FitSync.ask = async o => { window.__asked.push(o); return 'Te faltan **40 g** de proteína: suma 2 huevos en la once.'; }; });
+  await page.click('[data-view=comidas]');
+  await page.click('[data-view=hoy]');
+  await expect(page.locator('#dayTip')).toContainText('Te faltan 40 g de proteína');
+  expect(await page.evaluate(() => window.__asked.at(-1).message)).toContain('UN consejo concreto');
+  // Queda guardado: al volver a Hoy no se pregunta de nuevo
+  const n = await page.evaluate(() => window.__asked.length);
+  await page.click('[data-view=comidas]');
+  await page.click('[data-view=hoy]');
+  await expect(page.locator('#dayTip')).toContainText('Te faltan 40 g');
+  expect(await page.evaluate(() => window.__asked.length)).toBe(n);
+  // ↻ pide otro distinto
+  await page.click('#tipMore');
+  await expect.poll(() => page.evaluate(() => window.__asked.length)).toBe(n + 1);
+  expect(await page.evaluate(() => window.__asked.at(-1).message)).toContain('Que sea distinto');
+});
