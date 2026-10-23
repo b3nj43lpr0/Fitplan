@@ -29,6 +29,37 @@ function weightChart(ws) {
   </svg><div class="muted small">Puntos = cada pesaje · Línea violeta = promedio de 7 días (más confiable que un día suelto).</div>`;
 }
 // Por ejercicio: sesiones, mejor 1RM, peso máximo, más repeticiones, mejor volumen y cada vez que rompiste tu récord
+// ---------- Gasto real (TDEE adaptativo) ----------
+function realTdeeCard() {
+  const p = state.profile, r = realTdee();
+  if (!r) return '';
+  const need = !r.ready ? [r.days < 10 ? `${10 - r.days} días más con tus comidas completas` : '', r.weights < 3 || r.span < 10 ? 'pesarte al menos 3 veces en 10 días o más' : ''].filter(Boolean) : [];
+  return `<div class="card real-tdee">
+    <div class="row"><h2>🔥 Tu gasto real</h2>${p.gastoReal && r.ready ? '<span class="tag">En uso</span>' : ''}</div>
+    ${r.ready ? `<div class="minis" style="grid-template-columns:1fr 1fr">
+        <div class="mini"><b>${r0(r.v)}</b><span>kcal/día medido</span></div>
+        <div class="mini"><b>${r0(r.formula)}</b><span>kcal/día según fórmula</span></div>
+      </div>
+      <div class="bar" style="margin:10px 0 4px"><span style="width:${r0(r.conf * 100)}%;background:var(--accent)"></span></div>
+      <p class="muted small">Confianza ${r0(r.conf * 100)}% · ${r.days} días registrados y ${r.span} días de pesajes. Comiste ≈${r0(r.intake)} kcal/día y tu peso cambió ${r.slope > 0 ? '+' : ''}${r1(r.slope)} kg/semana.</p>
+      <button class="btn ${p.gastoReal ? 'ghost' : ''} sm" id="rtToggle">${p.gastoReal ? 'Volver a la fórmula' : 'Usar mi gasto real para mi meta'}</button>`
+    : `<p class="muted small">Comparo lo que comes con cómo cambia tu peso para medir cuánto gastas tú de verdad (no una fórmula). Para calcularlo me falta: ${need.join(' y ')}.</p>
+      <div class="bar"><span style="width:${r0(Math.min(1, r.days / 10) * 50 + Math.min(1, r.span / 10) * 50)}%;background:var(--accent)"></span></div>`}
+  </div>`;
+}
+function openRealTdee() {
+  const r = realTdee(), p = state.profile;
+  if (!r || !r.ready) return;
+  const goal = Math.max(p.sexo === 'h' ? 1500 : 1200, r.v + (dietBreakActive() ? 0 : goalAdj(p)));
+  openModal(`<h2>🔥 Tu gasto real</h2>
+    <p>Con tus últimas ${r.days} días registrados y tu peso, tu cuerpo gasta <b>≈${r0(r.v)} kcal al día</b> (sin contar el ejercicio que anotas). La fórmula general decía <b>${r0(r.formula)}</b>.</p>
+    <div class="result-box">Tu meta quedaría en <b>${r0(goal)} kcal</b> (hoy es ${r0(calcTargets().kcal)}).</div>
+    <p class="muted small">${r.v < r.formula ? 'Que salga más bajo puede ser porque tu metabolismo es más lento o porque algunas comidas no se anotaron; en ambos casos, usar el gasto real hace que tu meta funcione en la práctica.' : 'Gastas más de lo que dice la fórmula: puedes comer un poco más y seguir avanzando.'} Se recalcula solo cada día con tus nuevos datos.</p>
+    <div class="btn-row"><button class="btn" id="rtYes" style="flex:1">Usar mi gasto real</button><button class="btn ghost" id="rtNo">Ahora no</button></div>`, m => {
+    m.querySelector('#rtYes').addEventListener('click', () => { p.gastoReal = true; save(); closeModal(); render(); toast(`Listo: tu meta ahora es ${r0(calcTargets().kcal)} kcal`); });
+    m.querySelector('#rtNo').addEventListener('click', () => { p.gastoRealNo = todayKey(); save(); closeModal(); render(); });
+  });
+}
 function strengthStats() {
   const map = new Map();
   const ws = [...state.workouts].sort((a, b) => a.d.localeCompare(b.d));
@@ -317,6 +348,7 @@ function viewProgreso() {
           <button class="btn" id="addWeight" style="width:100%">Guardar peso</button>
           <p class="muted small">Pésate en ayunas, después de ir al baño, 2-3 veces por semana.</p>
         </div>
+        ${realTdeeCard()}
         <div class="card">
           <h2>Ajuste automático de la meta</h2>
           <label class="check" style="border:0;padding:0"><input type="checkbox" id="autoAdj" ${p.autoAjuste ? 'checked' : ''}><span>Ajustar mis calorías según mi progreso real</span></label>
@@ -435,6 +467,11 @@ bind.progreso = () => {
   $$('[data-del-w]').forEach(b => b.addEventListener('click', () => {
     removeWithUndo(state.weights, w => w.d === b.dataset.delW, 'Peso eliminado');
   }));
+  const rtt = $('#rtToggle');
+  if (rtt) rtt.addEventListener('click', () => {
+    if (state.profile.gastoReal) { state.profile.gastoReal = false; save(); render(); toast('Meta calculada con la fórmula'); }
+    else openRealTdee();
+  });
   $('#autoAdj').addEventListener('change', e => {
     state.profile.autoAjuste = e.target.checked;
     if (e.target.checked) autoAdjust(true);

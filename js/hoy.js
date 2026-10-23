@@ -33,6 +33,9 @@ function nudges(d, tg) {
   const has = m => d.foods.some(f => f.meal === m);
   const out = [];
   const dismissed = ui.dismissed || [];
+  // Gasto real ya medido y distinto de la fórmula: se ofrece usarlo (si no lo rechazó hace poco)
+  const p = state.profile, rt = !p.gastoReal && (!p.gastoRealNo || daysBetween(p.gastoRealNo, todayKey()) >= 14) ? realTdee() : null;
+  if (rt && rt.ready && Math.abs(rt.v - rt.formula) >= 100) out.push({ id: 'gasto', ico: '🔥', txt: `Medí tu gasto real: ≈${r0(rt.v)} kcal/día (la fórmula decía ${r0(rt.formula)}). ¿Ajusto tu meta con eso?`, act: 'gasto', btn: 'Ver' });
   if (h >= 10 && h < 16 && !has('desayuno')) out.push({ id: 'desayuno', ico: '🍳', txt: '¿Ya desayunaste? Regístralo para llevar bien la cuenta.', act: 'meal:desayuno', btn: 'Registrar' });
   if (h >= 15 && !has('almuerzo')) out.push({ id: 'almuerzo', ico: '🍲', txt: 'Aún no registras el almuerzo.', act: 'meal:almuerzo', btn: 'Registrar' });
   if (h >= 21 && !has('cena')) out.push({ id: 'cena', ico: '🥗', txt: 'Falta la cena de hoy.', act: 'meal:cena', btn: 'Registrar' });
@@ -289,9 +292,11 @@ function viewHoy() {
           <div><b>${r0(t.burned)}</b><span>quemadas</span></div>
           <div><b>${r0(tg.tdee + t.burned)}</b><span>gasto total</span></div>
         </div>
+        ${tg.real ? '<span class="pill" data-go="progreso" role="button">🔥 Meta según tu gasto real</span>' : ''}
         ${tg.ajuste ? `<span class="pill">Ajuste automático ${tg.ajuste > 0 ? '+' : ''}${tg.ajuste} kcal</span>` : ''}
       </div>
     </div>
+    ${dailyTipCard()}
     <div class="card">
       <div class="row"><h2>Macros del día</h2><button class="see" data-go="recetas">Ver recetas ›</button></div>
       ${dg.train ? `<p class="muted small" style="margin:-4px 0 6px">💪 Día de entrenamiento: tu meta sube ${r0(dg.carb - tg.carb)} g de carbohidratos para recuperarte.</p>` : ''}
@@ -371,11 +376,13 @@ bind.hoy = () => {
     if (kind === 'meal') { ui.meal = arg; go('comidas'); }
     if (kind === 'water') { day().water++; tap(); save(); render(); toast('💧 ¡Bien!'); }
     if (kind === 'prot') { ui.recipeTab = 'recetas'; ui.recipeTag = 'alta-proteina'; ui.recipeType = 'todas'; go('recetas'); }
+    if (kind === 'gasto') openRealTdee();
     if (kind === 'train') { ui.rutTab = 'rutina'; go('rutinas'); startWorkout(Number(arg)); }
   }));
   bindLogRecipe(currentDate);
   $('#avatarBtn').addEventListener('click', openProfiles);
   $('#coachBtn').addEventListener('click', openCoach);
+  bindDailyTip();
   $$('[data-prog-tab]').forEach(b => b.addEventListener('click', () => { ui.progTab = b.dataset.progTab; go('progreso'); }));
   $$('[data-check-ch]').forEach(b => b.addEventListener('click', () => {
     const c = state.challenges.find(x => x.id === b.dataset.checkCh && !x.closed);

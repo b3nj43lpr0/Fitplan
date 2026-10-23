@@ -366,14 +366,49 @@ function currentWeight() {
   const w = [...state.weights].sort((a, b) => a.d.localeCompare(b.d));
   return w.length ? w[w.length - 1].kg : state.profile ? state.profile.peso : 70;
 }
+// Gasto real (TDEE adaptativo): lo que comes vs. cómo cambia tu peso en las últimas 4 semanas.
+// Si comiste en promedio 2.300 kcal y bajaste 0,5 kg/semana (≈550 kcal/día de déficit), tu gasto es ≈2.850 kcal.
+// Solo cuentan días bien registrados; mientras haya pocos datos se mezcla con la fórmula.
+function realTdee(p = state.profile) {
+  if (!p) return null;
+  const end = shiftKey(todayKey(), -1), start = shiftKey(end, -27);
+  const peso = currentWeight();
+  const bmr = 10 * peso + 6.25 * p.altura - 5 * p.edad + (p.sexo === 'h' ? 5 : -161);
+  const formula = bmr * p.actividad;
+  const keys = [];
+  for (let k = start; k <= end; k = shiftKey(k, 1)) {
+    const d = state.days[k];
+    if (d && d.foods.length >= 2 && totals(d).kcal >= bmr * 0.6) keys.push(k); // días a medio anotar no sirven
+  }
+  const ws = state.weights.filter(w => w.d >= shiftKey(start, -3) && w.d <= todayKey()).sort((a, b) => a.d.localeCompare(b.d));
+  const span = ws.length ? daysBetween(ws[0].d, ws[ws.length - 1].d) : 0;
+  if (keys.length < 10 || ws.length < 3 || span < 10) return { ready: false, days: keys.length, weights: ws.length, span, formula };
+  // Pendiente del peso (kg/día) por mínimos cuadrados: más estable que comparar el primer y el último pesaje
+  const xs = ws.map(w => daysBetween(ws[0].d, w.d)), ys = ws.map(w => w.kg);
+  const mx = xs.reduce((a, b) => a + b) / xs.length, my = ys.reduce((a, b) => a + b) / ys.length;
+  let num = 0, den = 0;
+  xs.forEach((x, i) => { num += (x - mx) * (ys[i] - my); den += (x - mx) ** 2; });
+  const slope = den ? num / den : 0;
+  const tt = keys.map(k => totals(state.days[k]));
+  const intake = tt.reduce((a, t) => a + t.kcal, 0) / tt.length;
+  const burned = tt.reduce((a, t) => a + t.burned, 0) / tt.length;
+  // Gasto sin el ejercicio anotado (ese se suma aparte cada día, como siempre)
+  const measured = intake - slope * KCAL_KG - burned;
+  const conf = Math.min(1, keys.length / 21) * Math.min(1, span / 21);
+  const v = Math.min(bmr * 2.4, Math.max(bmr * 1.1, formula + (measured - formula) * conf));
+  return { ready: true, v, measured, formula, conf, days: keys.length, span, intake, slope: slope * 7 };
+}
 function calcTargets(p = state.profile) {
   if (!p) return null;
   const peso = currentWeight();
   const bmr = 10 * peso + 6.25 * p.altura - 5 * p.edad + (p.sexo === 'h' ? 5 : -161);
-  const tdee = bmr * p.actividad;
+  const real = p.gastoReal ? realTdee(p) : null; // se activa en Progreso → Peso o desde el aviso en Hoy
+  const useReal = !!(real && real.ready);
+  const tdee = useReal ? real.v : bmr * p.actividad;
   const goal = GOALS[p.objetivo];
   const diet = DIETS[p.dieta || 'equilibrada'];
-  const ajuste = p.autoAjuste ? state.ajuste : 0;
+  // Con el gasto real ya medido, el ajuste semanal antiguo no se suma (sería corregir dos veces)
+  const ajuste = p.autoAjuste && !useReal ? state.ajuste : 0;
   const breakOn = dietBreakActive();
   const adj = breakOn ? 0 : goalAdj(p);
   const floor = p.sexo === 'h' ? 1500 : 1200;
@@ -383,7 +418,7 @@ function calcTargets(p = state.profile) {
   const carb = Math.max(0, (kcal - prot * 4 - fat * 9) / 4);
   const imc = peso / Math.pow(p.altura / 100, 2);
   const water = Math.round((peso * 35) / 250); // vasos de 250 ml
-  return { bmr, tdee, kcal, prot, fat, carb, imc, water, peso, ajuste, adj, floor, breakOn, plannedDeficit: tdee - kcal };
+  return { bmr, tdee, kcal, prot, fat, carb, imc, water, peso, ajuste, adj, floor, breakOn, plannedDeficit: tdee - kcal, real: useReal, tdeeFormula: bmr * p.actividad };
 }
 // Metas de macros del día: las calorías quemadas se "devuelven" sobre todo como carbohidratos (70 %) y algo de grasa
 function dayGoals(tg, burned) {

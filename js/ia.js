@@ -240,7 +240,7 @@ function aiExerciseReview(box, strength, cardio, minutes, note) {
   let mins = Math.round(minutes || nSets * 2.5);
   const prevOf = x => (x.e ? bestE1rm(x.e.id) : 0);
   const paint = () => {
-    const kcalW = strength.length ? burnedKcal(gymMet(strength.map(x => ({ id: x.e && x.e.id, sets: x.sets }))), mins) : 0;
+    const kcalW = strength.length ? gymKcal(strength.map(x => ({ id: x.e && x.e.id, sets: x.sets })), mins) : 0;
     const kcalC = cardio.reduce((a, x) => a + burnedKcal(x.a.met, x.minutes), 0);
     box.innerHTML = `<div class="ai-result">
       ${strength.length ? `<h3>🏋️ Pesas</h3><div class="list">${strength.map((x, i) => {
@@ -305,7 +305,7 @@ function aiExerciseReview(box, strength, cardio, minutes, note) {
     // Si un ejercicio aparece dos veces, se juntan sus series
     const merged = [];
     for (const x of ex) { const y = merged.find(z => z.id === x.id); y ? y.sets.push(...x.sets) : merged.push({ ...x, sets: [...x.sets] }); }
-    const prs = merged.length ? logStrength(merged, mins, burnedKcal(gymMet(merged), mins), { name: 'Pesas' }) : [];
+    const prs = merged.length ? logStrength(merged, mins, gymKcal(merged, mins), { name: 'Pesas' }) : [];
     saveCardio();
     save(); closeModal(); render(); tap();
     if (prs.length) { confetti(60); toast(`🏆 ¡Nuevo récord en ${prs.join(', ')}!`); } else toast('Entrenamiento guardado 💪');
@@ -409,4 +409,46 @@ Formato, máximo 9 líneas:
     storeCoach(log);
     box.innerHTML = mdLite(text);
   } catch (e) { box.innerHTML = aiFail(e); }
+}
+
+// ---------- Consejo del día (en Hoy) ----------
+// Uno por mañana, tarde y noche: la IA lo escribe con tus números del momento; sin IA, uno calculado
+const TIP_KEY = pkey('fitplan-tip');
+const tipSlot = () => { const h = new Date().getHours(); return todayKey() + (h < 12 ? 'm' : h < 18 ? 't' : 'n'); };
+function storedTip() { try { const t = JSON.parse(localStorage.getItem(TIP_KEY)); return t && t.k === tipSlot() ? t.text : null; } catch (e) { return null; } }
+function basicTip() {
+  const tg = calcTargets(), d = peekDay(todayKey()), t = totals(d), dg = dayGoals(tg, t.burned);
+  const left = tg.kcal + t.burned - t.kcal, protLeft = dg.prot - t.p, h = new Date().getHours();
+  if (left < -150) return `Te pasaste ${r0(-left)} kcal hoy. Una caminata rápida de ${Math.min(90, Math.max(20, Math.round(-left / burnedKcal(4.3, 1) / 5) * 5))} min lo compensa, o mañana ajusta un poco la cena.`;
+  if (h >= 11 && protLeft > 30) return `Te faltan ${r0(protLeft)} g de proteína. Un yogur griego (≈15 g), 2 huevos (≈12 g) o 100 g de pollo (≈31 g) te acercan a la meta.`;
+  if (d.water < tg.water / 2 && h >= 13) return `Vas ${d.water} de ${tg.water} vasos de agua. Toma uno ahora y otro con cada comida.`;
+  if (!d.foods.length) return `Hoy tienes ${r0(tg.kcal)} kcal y ${r0(dg.prot)} g de proteína. Partir con un desayuno con proteína ayuda a llegar con menos hambre a la tarde.`;
+  return `Vas bien: te quedan ${r0(Math.max(0, left))} kcal y ${r0(Math.max(0, protLeft))} g de proteína para el resto del día.`;
+}
+function dailyTipCard() {
+  if (currentDate !== todayKey() || !state.profile) return '';
+  return `<div class="tip-card"><span class="tip-ico">💡</span><div class="tip-txt" id="dayTip">${mdLite(storedTip() || basicTip())}</div><button class="icon-btn" id="tipMore" aria-label="Otro consejo" title="Otro consejo">↻</button></div>`;
+}
+let tipBusy = false;
+async function loadDailyTip(force) {
+  const box = document.getElementById('dayTip');
+  if (!box || tipBusy || !aiReady() || (!force && storedTip())) return;
+  tipBusy = true;
+  try {
+    const text = await window.FitSync.ask({ system: COACH_SYSTEM, maxTokens: 300, message: `DATOS ACTUALIZADOS:\n${coachContext()}\n\nPREGUNTA: Dame UN consejo concreto y accionable para lo que queda de hoy (son las ${new Date().getHours()}:00), con números de mis datos. Máximo 2 frases, sin saludo ni viñetas.${force ? ' Que sea distinto a: ' + (storedTip() || basicTip()) : ''}` });
+    try { localStorage.setItem(TIP_KEY, JSON.stringify({ k: tipSlot(), text: text.trim() })); } catch (e) { /* ignorar */ }
+    const b = document.getElementById('dayTip');
+    if (b) b.innerHTML = mdLite(text.trim());
+  } catch (e) { console.warn('Consejo IA:', e); }
+  finally { tipBusy = false; }
+}
+function bindDailyTip() {
+  const more = document.getElementById('tipMore');
+  if (!more) return;
+  more.addEventListener('click', () => {
+    if (!aiReady()) { document.getElementById('dayTip').innerHTML = mdLite(basicTip()); return toast('Inicia sesión en Perfil para consejos con IA'); }
+    document.getElementById('dayTip').innerHTML = '<span class="muted">Pensando…</span>';
+    loadDailyTip(true);
+  });
+  loadDailyTip();
 }

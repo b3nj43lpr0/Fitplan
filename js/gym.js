@@ -101,13 +101,41 @@ function exUsage() {
 const fmtSets = sets => sets.map(z => (z.kg ? z.kg + '×' : '') + z.reps).join(' · ');
 
 // ---------- Calorías ----------
-// Promedio del gasto (MET) de los ejercicios, ponderado por series, ajustado por intensidad
 const GYM_INTENSITY = { suave: ['😌 Suave', 0.8], normal: ['🙂 Normal', 1], intensa: ['🥵 Intensa', 1.2] };
-function gymMet(items, inten = 'normal') {
-  let s = 0, n = 0;
-  for (const x of items) { const e = exById(x.id), k = x.sets.length || 1; s += ((e && e.met) || 5) * k; n += k; }
-  const met = n ? s / n : 5;
-  return Math.min(8, Math.max(3, met)) * GYM_INTENSITY[inten][1];
+// Calorías del gym: el tiempo en serie (≈4 s por repetición, mínimo 20 s) va al gasto del ejercicio (MET)
+// y el resto de la sesión es descanso activo (MET 2-3). Se suma un 10 % del trabajo por el gasto posterior (EPOC).
+// Así una sesión larga con mucho descanso no cuenta como si fueran 60 minutos levantando sin parar.
+function gymKcal(items, minutes, inten = 'normal') {
+  const kg = currentWeight(), f = GYM_INTENSITY[inten][1];
+  let workMin = 0, workKcal = 0;
+  for (const x of items) {
+    const e = x.id && exById(x.id), met = Math.min(9, Math.max(3, (e && e.met) || 5)) * f;
+    for (const z of x.sets) {
+      const sec = Math.max(20, (Number(z.reps) || 10) * 4);
+      workMin += sec / 60;
+      workKcal += met * kg * sec / 3600;
+    }
+  }
+  const rest = Math.max(0, minutes - workMin);
+  return workKcal * 1.1 + 2.5 * f * kg * rest / 60;
+}
+// Qué peso usar hoy (progresión doble, rango 8-12): si la última vez llegaste a 12 en todas las series, sube el peso;
+// si no, mismo peso y una repetición más
+function nextTarget(id) {
+  const last = lastSets(id), e = exById(id);
+  if (!last || !last.length) return null;
+  const withKg = last.filter(z => Number(z.kg) > 0);
+  const kind = e ? eqKind(e) : 'otro';
+  if (!withKg.length) {
+    const minR = Math.min(...last.map(z => Number(z.reps) || 0));
+    return minR ? { kg: 0, reps: minR + 1, sets: last.length, why: `la última vez hiciste ${fmtSets(last)}: suma una repetición` } : null;
+  }
+  const top = Math.max(...withKg.map(z => Number(z.kg))), atTop = withKg.filter(z => Number(z.kg) === top);
+  const minR = Math.min(...atTop.map(z => Number(z.reps) || 0));
+  const step = kind === 'mancuernas' ? 2 : kind === 'corporal' ? 0 : top < 20 ? 1.25 : 2.5;
+  if (minR >= 12 && step) return { kg: r1(top + step), reps: 8, sets: last.length, why: `la última vez hiciste ${top} kg × ${minR}+ en todas: ¡sube el peso!` };
+  if (minR < 8) return { kg: top, reps: 8, sets: last.length, why: `la última vez ${top} kg × ${minR}: apunta a 8 con el mismo peso` };
+  return { kg: top, reps: Math.min(12, minR + 1), sets: last.length, why: `la última vez ${top} kg × ${minR}: una repetición más con el mismo peso` };
 }
 const gymAutoMinutes = items => Math.max(10, Math.round(items.reduce((a, x) => a + x.sets.length, 0) * 2.5));
 // Guarda la sesión: entrenamiento con series (cuenta para récords) + actividad del día con sus calorías
@@ -149,8 +177,10 @@ function openGymLog(wid) {
     // Al cerrar se redibuja la pantalla para mostrar si quedó un borrador
     m._cleanup = () => setTimeout(render);
     const box = m.querySelector('#gym');
-    const minutes = () => d.minutes || gymAutoMinutes(d.items);
-    const kcal = () => burnedKcal(gymMet(d.items, d.inten), minutes());
+    // Si anotas mientras entrenas, la duración sale del reloj (desde la primera serie que anotaste)
+    const liveMin = () => (d.t0 && d.date === todayKey() ? Math.round((Date.now() - d.t0) / 60000) + 3 : 0);
+    const minutes = () => d.minutes || (liveMin() >= 15 && liveMin() <= 240 ? liveMin() : gymAutoMinutes(d.items));
+    const kcal = () => gymKcal(d.items, minutes(), d.inten);
     const summary = () => {
       const sets = d.items.reduce((a, x) => a + x.sets.length, 0), vol = d.items.reduce((a, x) => a + x.sets.reduce((b, z) => b + (Number(z.kg) || 0) * (Number(z.reps) || 0), 0), 0);
       return `<div class="minis gym-sum"><div class="mini"><b>${sets}</b><span>series</span></div><div class="mini"><b>${r0(vol)}</b><span>kg de volumen</span></div><div class="mini"><b style="color:var(--burn)">${r0(kcal())}</b><span>kcal quemadas</span></div></div>`;
@@ -169,6 +199,7 @@ function openGymLog(wid) {
           const e = exById(x.id) || { n: 'Ejercicio', m: [], img: [] }, l = last(x.id);
           return `<div class="gym-ex">
             <div class="gym-ex-h">${exThumb(e)}<div class="info"><b>${esc(e.n)}</b><span class="muted small">${esc(e.m.slice(0, 2).join(', '))}${l ? ` · última vez ${shortDate(l.d)}: ${fmtSets(l.sets)}` : ''}</span><span data-gx-pr="${i}">${prTag(x)}</span></div><button class="icon-btn" data-gx-del="${i}" aria-label="Quitar ejercicio">✕</button></div>
+            ${(() => { const nt = !d.wid && nextTarget(x.id); return nt ? `<div class="gym-tip"><span>💡 Hoy: <b>${nt.kg ? nt.kg + ' kg × ' : ''}${nt.reps}</b> <span class="muted small">· ${esc(nt.why)}</span></span><button class="btn sm ghost" data-gx-tip="${i}">Usar</button></div>` : ''; })()}
             ${x.sets.map((z, k) => `<div class="gym-set"><span class="muted small">${k + 1}</span>
               <div class="field"><input type="number" min="0" step="0.5" inputmode="decimal" value="${z.kg}" placeholder="0" data-gs-kg="${i}:${k}" aria-label="Kilos serie ${k + 1}"><span class="unit-in">kg</span></div>
               <span class="muted">×</span>
@@ -179,6 +210,7 @@ function openGymLog(wid) {
         }).join('')}
         <button class="btn ghost" id="gAdd" style="width:100%;margin:6px 0 14px">＋ Agregar ejercicio</button>
         ${d.items.length ? `<div class="gym-foot">
+          ${!d.minutes && liveMin() >= 15 && liveMin() <= 240 ? `<p class="muted small" style="margin:0 0 4px">⏱️ Llevas ${liveMin()} min desde tu primera serie</p>` : ''}
           <div class="row"><label for="gMin" class="small"><b>Duración</b> (min)</label><div class="field" style="margin:0;width:110px"><input id="gMin" type="number" min="1" inputmode="numeric" value="${minutes()}"></div></div>
           <div class="chips" style="margin:8px 0">${Object.entries(GYM_INTENSITY).map(([k, [l]]) => `<button class="chip ${k === d.inten ? 'active' : ''}" data-gi="${k}">${l}</button>`).join('')}</div>
           <div id="gSum">${summary()}</div>
@@ -187,6 +219,7 @@ function openGymLog(wid) {
           ${d.wid ? '' : '<button class="see" id="gClear" style="color:var(--danger);margin-top:8px">Descartar</button>'}
         </div>` : ''}`;
       const upd = () => {
+        if (!d.t0 && !d.wid) d.t0 = Date.now();
         keep();
         const s = box.querySelector('#gSum'); if (s) s.innerHTML = summary();
         box.querySelectorAll('[data-gx-pr]').forEach(el => { el.innerHTML = prTag(d.items[el.dataset.gxPr]); });
@@ -196,6 +229,11 @@ function openGymLog(wid) {
       box.querySelectorAll('[data-gs-reps]').forEach(inp => inp.addEventListener('input', () => { const [i, k] = at(inp.dataset.gsReps); d.items[i].sets[k].reps = inp.value === '' ? '' : Number(inp.value); upd(); }));
       box.querySelectorAll('[data-gs-add]').forEach(b => b.addEventListener('click', () => { const s = d.items[b.dataset.gsAdd].sets, l = s[s.length - 1]; s.push(l ? { ...l } : { kg: '', reps: '' }); keep(); paint(); }));
       box.querySelectorAll('[data-gs-del]').forEach(b => b.addEventListener('click', () => { const [i, k] = at(b.dataset.gsDel); d.items[i].sets.splice(k, 1); if (!d.items[i].sets.length) d.items.splice(i, 1); keep(); paint(); }));
+      box.querySelectorAll('[data-gx-tip]').forEach(b => b.addEventListener('click', () => {
+        const x = d.items[b.dataset.gxTip], nt = nextTarget(x.id);
+        x.sets = Array.from({ length: Math.max(nt.sets, 1) }, () => ({ kg: nt.kg || '', reps: nt.reps }));
+        keep(); paint(); tap();
+      }));
       box.querySelectorAll('[data-gx-del]').forEach(b => b.addEventListener('click', () => { d.items.splice(Number(b.dataset.gxDel), 1); keep(); paint(); }));
       box.querySelector('#gAdd').addEventListener('click', () => { screen = 'picker'; q = ''; paint(); });
       box.querySelectorAll('[data-gi]').forEach(b => b.addEventListener('click', () => { d.inten = b.dataset.gi; keep(); paint(); }));
