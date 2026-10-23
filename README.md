@@ -84,6 +84,10 @@ En Entrenar → Actividad → **🏋️ Registrar ejercicios del gym**:
 ### Más funciones con la misma IA
 
 - **Foto del plato** (Comidas → 📸): la IA analiza la foto con más detalle (piensa más y usa referencias de tamaño como el plato y los cubiertos), separa cada componente, agrega el aceite de cocción y las salsas, y elige alimentos de la base de la app para usar sus valores exactos (USDA). Muestra calorías, proteína, carbos y grasas, la confianza y un rango. Puedes ajustar la porción (½ a +½), cambiar gramos o escribir una corrección ("el arroz era integral") para recalcular. Se anota cada alimento en la comida que corresponde (la que diga la IA o la de la hora).
+- **La foto aprende de ti**: la IA recibe las porciones que sueles comer (mediana de tus últimos 60 días, que ya incluye tus correcciones) y tus combos, y los usa como referencia.
+- **Antes y después**: si dejaste comida, "Foto de lo que sobró" envía las dos fotos y se anota solo lo que comiste.
+- **Etiqueta con IA**: en Comidas → 🏷️ Etiqueta / crear, con sesión iniciada la tabla nutricional se lee con Gemini (columna de 100 g, porción, kJ → kcal); sin sesión se usa el lector dentro del teléfono.
+- **Producto sin código en la base**: si Open Food Facts no lo tiene, "Crearlo con fotos del envase" lee el frente y la etiqueta, y lo guarda con su código para la próxima vez que lo escanees.
 - **Escribe o dicta lo que comiste** (Comidas → 💬): "2 huevos revueltos y una marraqueta con palta" se separa en alimentos. Si un alimento coincide con uno de la base, se usan los valores de la base. Antes de guardar puedes cambiar los gramos, quitar alimentos y elegir la comida.
 - **Escribe o dicta lo que entrenaste** (Entrenar → Actividad → 💬): "press banca 3x10 con 60 kg y 20 min de trote" queda registrado como entrenamiento con series (cuenta para tus récords) y como actividad con calorías. Si un ejercicio no calza, lo cambias en la lista o se crea como nuevo.
 - **Armar una comida** (Recetas → 🤖 Con IA): propone un plato con las calorías y proteína que te quedan, con lo que tengas en la casa. Lo agregas al día o lo guardas como combo.

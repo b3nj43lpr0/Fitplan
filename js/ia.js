@@ -34,8 +34,27 @@ function aiFoodEntry(it) {
 }
 // Instrucciones para estimar un plato con la mayor precisión posible, con la base de alimentos de la app como referencia
 let foodSystemTxt = null;
+// Lo que aprende de ti: las porciones que sueles comer (tu historial, que ya incluye tus correcciones) y tus combos
+function personalFoodHints() {
+  const from = shiftKey(todayKey(), -60), by = new Map();
+  for (const [k, d] of Object.entries(state.days)) {
+    if (k < from) continue;
+    for (const f of d.foods) {
+      if (!f.grams) continue;
+      const key = norm(f.name);
+      if (!by.has(key)) by.set(key, { name: f.name, g: [] });
+      by.get(key).g.push(f.grams);
+    }
+  }
+  const med = a => { const b = [...a].sort((x, y) => x - y); return b[Math.floor(b.length / 2)]; };
+  const usual = [...by.values()].filter(x => x.g.length >= 2).sort((a, b) => b.g.length - a.g.length).slice(0, 25)
+    .map(x => `${x.name} ~${r0(med(x.g))} g (${x.g.length} veces)`);
+  const combos = state.combos.slice(0, 10).map(c => `${c.name}: ${c.items.map(i => `${i.name}${i.grams ? ' ' + r0(i.grams) + ' g' : ''}`).join(', ')}`);
+  return (usual.length ? `\nPORCIONES HABITUALES DE ESTA PERSONA (lo que suele comer; úsalas como referencia cuando en la foto se vea algo parecido, pero manda lo que se ve):\n${usual.join('\n')}` : '')
+    + (combos.length ? `\nCOMIDAS QUE REPITE (si la foto o el texto calza con una, usa esos alimentos y cantidades):\n${combos.join('\n')}` : '');
+}
 function foodSystem() {
-  if (foodSystemTxt) return foodSystemTxt;
+  if (foodSystemTxt) return foodSystemTxt + personalFoodHints();
   foodSystemTxt = `Eres un nutricionista experto en comida chilena y latinoamericana. Tu trabajo es estimar con la MAYOR PRECISIÓN posible los gramos, calorías y proteína de lo que la persona comió.
 MÉTODO (piénsalo antes de responder):
 1. Identifica cada componente por separado: proteína (carne, pollo, pescado, huevo), acompañamiento (arroz, papas, fideos, legumbres), verduras, pan, salsas, aderezos, bebidas.
@@ -50,7 +69,7 @@ Responde SOLO con JSON:
 - meal: la comida del día si la mencionan o es evidente (ej: café con tostadas = desayuno); si no, null.
 BASE (id: nombre, valores por 100 g en la app):
 ${FOODS.map(f => `${f.id}: ${f.name}`).join('\n')}`;
-  return foodSystemTxt;
+  return foodSystemTxt + personalFoodHints();
 }
 function openAIFood(mode = 'texto') {
   if (!aiReady()) return openModal(`<h2>${mode === 'foto' ? '📸 Foto del plato' : '💬 Cuéntame qué comiste'}</h2>${AI_LOGIN}`, bindLogin);
@@ -75,7 +94,7 @@ function openAIFood(mode = 'texto') {
     });
     if (speech) bindMic(q('#afMic'), q('#afText'), speech);
     // fix: corrección de la persona sobre el resultado anterior (se vuelve a calcular con la misma foto)
-    const run = async (fix, prev) => {
+    const run = async (fix, prev, after) => {
       const text = q('#afText').value.trim();
       if (mode === 'foto' && !image) return toast('Primero saca una foto');
       if (mode !== 'foto' && !text) return toast('Cuéntame qué comiste');
@@ -87,13 +106,14 @@ function openAIFood(mode = 'texto') {
           ? `Analiza esta foto de mi comida: identifica cada alimento y estima sus gramos con precisión.${text ? ' Detalle que doy yo: ' + text : ''}`
           : `Esto comí: ${text}`)
           + ` (Son las ${hour}:00.)`
-          + (fix ? `\nTu estimación anterior fue: ${JSON.stringify(prev.map(x => ({ name: x.name, grams: r0(x.grams), kcal: r0(x.kcal) })))}.\nCORRECCIÓN DE LA PERSONA (respétala): ${fix}` : '');
-        const r = await aiJSON(ask, { system: foodSystem(), image: mode === 'foto' ? image : undefined, maxTokens: 4096, think: mode === 'foto' ? 'MEDIUM' : undefined, timeoutMs: mode === 'foto' ? 70000 : undefined });
+          + (fix ? `\nTu estimación anterior fue: ${JSON.stringify(prev.map(x => ({ name: x.name, grams: r0(x.grams), kcal: r0(x.kcal) })))}.\nCORRECCIÓN DE LA PERSONA (respétala): ${fix}` : '')
+          + (after ? `\nLa PRIMERA foto es el plato servido y la SEGUNDA es lo que SOBRÓ. Estima solo lo que se comió de cada alimento (servido menos sobras).${prev ? ' Tu estimación del plato servido fue: ' + JSON.stringify(prev.map(x => ({ name: x.name, grams: r0(x.grams) }))) + '.' : ''}` : '');
+        const r = await aiJSON(ask, { system: foodSystem(), image: mode === 'foto' ? (after ? [image, after] : image) : undefined, maxTokens: 4096, think: mode === 'foto' ? 'MEDIUM' : undefined, timeoutMs: mode === 'foto' ? 70000 : undefined });
         const items = (Array.isArray(r.items) ? r.items : []).map(aiFoodEntry).filter(x => x.kcal > 0);
         if (!items.length) { q('#afOut').innerHTML = '<div class="hint-box">No reconocí alimentos. Prueba describiéndolo con más detalle.</div>'; return; }
         // La comida: la que diga la IA o, si no, la de la hora (si estás registrando hoy)
         const meal = MEALS.some(x => x.id === r.meal) ? r.meal : currentDate === todayKey() ? guessMeal() : ui.meal;
-        aiFoodReview(q('#afOut'), items, meal, r.note, { dish: r.dish, confidence: r.confidence, onFix: f => run(f, items) });
+        aiFoodReview(q('#afOut'), items, meal, r.note, { dish: r.dish, confidence: r.confidence, onFix: f => run(f, items, after), onLeftover: mode === 'foto' && !after ? img => run(undefined, items, img) : null, leftover: !!after });
       } catch (e) { q('#afOut').innerHTML = aiFail(e); }
       finally { q('#afGo').disabled = false; }
     };
@@ -116,7 +136,7 @@ function bindMic(btn, input, Speech) {
 // Revisión antes de guardar: se puede cambiar gramos (escala todo), quitar alimentos y elegir la comida
 // Margen de error según la confianza de la IA
 const CONF = { alta: ['🟢', 'Confianza alta', 0.1], media: ['🟡', 'Confianza media', 0.2], baja: ['🔴', 'Confianza baja: revisa los gramos', 0.3] };
-function aiFoodReview(box, items, meal, note, { dish, confidence, onFix } = {}) {
+function aiFoodReview(box, items, meal, note, { dish, confidence, onFix, onLeftover, leftover } = {}) {
   const base = items.map(x => ({ ...x })); // para la porción (×0,5 … ×1,5) sobre lo estimado
   let portion = 1;
   const scale = k => { portion = k; items.forEach((x, i) => { ['grams', 'kcal', 'p', 'c', 'g'].forEach(f => { x[f] = base[i][f] * k; }); }); };
@@ -125,7 +145,7 @@ function aiFoodReview(box, items, meal, note, { dish, confidence, onFix } = {}) 
     const cf = CONF[confidence];
     box.innerHTML = `<div class="ai-result">
       <div class="ai-total">
-        ${dish ? `<div class="muted small">${esc(String(dish).slice(0, 60))}</div>` : ''}
+        ${dish || leftover ? `<div class="muted small">${esc(String(dish || '').slice(0, 60))}${leftover ? ' · 🍽️ descontando lo que sobró' : ''}</div>` : ''}
         <div class="ai-total-row"><div><b>${r0(tot('kcal'))}</b><span>kcal</span></div><div class="prot"><b>${r0(tot('p'))} g</b><span>proteína</span></div><div><b>${r0(tot('c'))} g</b><span>carbos</span></div><div><b>${r0(tot('g'))} g</b><span>grasas</span></div></div>
         ${cf ? `<div class="muted small">${cf[0]} ${cf[1]} · entre ${r0(tot('kcal') * (1 - cf[2]))} y ${r0(tot('kcal') * (1 + cf[2]))} kcal</div>` : ''}
       </div>
@@ -138,6 +158,7 @@ function aiFoodReview(box, items, meal, note, { dish, confidence, onFix } = {}) 
         <div class="field ai-g"><input type="number" min="1" inputmode="decimal" value="${r0(x.grams) || ''}" data-ai-g="${i}" aria-label="Gramos"><span class="unit-in">g</span></div>
         <span class="kcal">${r0(x.kcal)}</span></div>`).join('')}</div>
       ${note ? `<p class="muted small">💡 ${esc(note)}</p>` : ''}
+      ${onLeftover ? `<label class="btn ghost label-btn" style="width:100%;margin:10px 0 0">🍽️ ¿Dejaste comida? Foto de lo que sobró<input type="file" id="aiLeft" accept="image/*" capture="environment" hidden></label>` : ''}
       ${onFix ? `<details class="ai-fix"><summary>✏️ ¿Algo no está bien? Corrígelo y recalculo</summary>
         <div class="search-row" style="margin-top:8px"><input id="aiFixTxt" placeholder='Ej: "el arroz era integral", "sin aceite", "eran 2 presas"'><button class="btn sm" id="aiFixGo">Recalcular</button></div></details>` : ''}
       <div class="meal-pick small-pick">${MEALS.map(x => `<button class="${x.id === meal ? 'on' : ''}" data-ai-meal="${x.id}">${MEAL_ICO[x.id]} ${x.name}</button>`).join('')}</div>
@@ -156,6 +177,8 @@ function aiFoodReview(box, items, meal, note, { dish, confidence, onFix } = {}) 
       setTimeout(paint);
     }));
     box.querySelectorAll('[data-ai-meal]').forEach(b => b.addEventListener('click', () => { meal = b.dataset.aiMeal; paint(); }));
+    const lf = box.querySelector('#aiLeft');
+    if (lf) lf.addEventListener('change', async e => { const f = e.target.files[0]; e.target.value = ''; if (f) onLeftover(await fileToImage(f)); });
     const fx = box.querySelector('#aiFixGo');
     if (fx) fx.addEventListener('click', () => { const t = box.querySelector('#aiFixTxt').value.trim(); if (!t) return toast('Escribe qué corregir'); onFix(t); });
     box.querySelector('#aiSave').addEventListener('click', () => {
@@ -451,4 +474,67 @@ function bindDailyTip() {
     loadDailyTip(true);
   });
   loadDailyTip();
+}
+
+// ---------- Etiqueta nutricional y productos con IA ----------
+// Lee la tabla nutricional (y el frente del envase, si viene) y devuelve valores por 100 g
+const LABEL_SYSTEM = `Lees envases de alimentos de Chile y Latinoamérica. Responde SOLO con JSON:
+{"name":"nombre del producto como aparece en el envase","brand":"marca o vacío","per100":{"kcal":0,"p":0,"c":0,"g":0,"sugar":0,"sodium_mg":0,"fiber":0},"portion_g":0,"unit":"g|ml","ok":true,"note":""}
+- Las etiquetas chilenas tienen columnas "100 g" (o "100 ml") y "1 porción". Usa SIEMPRE la columna de 100 g/ml. Si solo hay porción, convierte a 100 g con el tamaño de la porción.
+- "Energía (kcal)" son las calorías. Si solo hay kJ, divide por 4,184. p = proteínas, c = hidratos de carbono disponibles, g = grasas totales.
+- portion_g: tamaño de la porción en g o ml (0 si no aparece).
+- Lee los números con cuidado (coma decimal = punto). Si no se ve la tabla o está ilegible, ok: false y explica en note.
+- Si no ves el nombre del producto, deja name vacío.`;
+async function aiLabel(images) {
+  const r = await aiJSON('Lee este envase y su tabla nutricional.', { system: LABEL_SYSTEM, image: images, think: 'MEDIUM', maxTokens: 1500, timeoutMs: 60000 });
+  const v = r.per100 || {};
+  return { ok: r.ok !== false && num(v.kcal, 1000) > 0, name: String(r.name || '').slice(0, 80), brand: String(r.brand || '').slice(0, 60), kcal: r1(num(v.kcal, 1000)), p: r1(num(v.p, 100)), c: r1(num(v.c, 100)), g: r1(num(v.g, 100)), por: r0(num(r.portion_g, 2000)) || null, note: r.note };
+}
+const fileToImage = async f => { const url = await shrinkImage(f, 1400); return { data: url.split(',')[1], mimeType: 'image/jpeg' }; };
+// Producto que no está en Open Food Facts: con fotos del frente y la etiqueta se crea solo (queda guardado con su código)
+function openAIProduct(code) {
+  if (!aiReady()) return openModal(`<h2>📸 Crear producto con IA</h2>${AI_LOGIN}`, bindLogin);
+  openModal(`<h2>📸 Crear producto con IA</h2>
+    <p class="muted small" style="margin-top:-6px">Saca 1 o 2 fotos: el <b>frente</b> del envase (para el nombre) y la <b>tabla nutricional</b>. La IA lee los valores por 100 g.</p>
+    <label class="btn ghost label-btn" style="width:100%">📷 Elegir o sacar fotos<input type="file" id="apPhotos" accept="image/*" multiple hidden></label>
+    <label class="btn ghost label-btn" style="width:100%;margin-top:8px">📷 Sacar otra foto<input type="file" id="apOne" accept="image/*" capture="environment" hidden></label>
+    <div class="ap-thumbs" id="apThumbs"></div>
+    <button class="btn" id="apGo" style="width:100%" disabled>🔎 Leer envase</button>
+    <div id="apOut"></div>`, m => {
+    const q = s => m.querySelector(s);
+    const imgs = [];
+    const add = async files => {
+      for (const f of [...files].slice(0, 3 - imgs.length)) { const im = await fileToImage(f); imgs.push(im); q('#apThumbs').insertAdjacentHTML('beforeend', `<img src="data:image/jpeg;base64,${im.data}" alt="">`); }
+      q('#apGo').disabled = !imgs.length;
+      if (imgs.length >= 2) run();
+    };
+    q('#apPhotos').addEventListener('change', e => { add(e.target.files); e.target.value = ''; });
+    q('#apOne').addEventListener('change', e => { add(e.target.files); e.target.value = ''; });
+    const run = async () => {
+      q('#apGo').disabled = true;
+      q('#apOut').innerHTML = spinner('Leyendo el envase…');
+      try {
+        const r = await aiLabel(imgs);
+        if (!r.ok) { q('#apOut').innerHTML = `<div class="hint-box">No pude leer la tabla. ${esc(r.note || 'Saca la foto más de cerca, recta y con buena luz.')}</div>`; return; }
+        q('#apOut').innerHTML = `<div class="ai-result">
+          <div class="field"><label for="apName">Nombre</label><input id="apName" value="${esc(r.name || 'Producto ' + (code || ''))}"></div>
+          <div class="grid g4 keep" style="gap:8px">${[['kcal', 'kcal'], ['p', 'Prot.'], ['c', 'Carb.'], ['g', 'Grasa']].map(([k, l]) => `<div class="field"><label for="ap_${k}">${l}</label><input id="ap_${k}" type="number" min="0" inputmode="decimal" value="${r[k]}"></div>`).join('')}</div>
+          <div class="field"><label for="apPor">Porción (g)</label><input id="apPor" type="number" min="0" inputmode="decimal" value="${r.por || ''}"></div>
+          <p class="muted small">Valores por 100 g, leídos de la etiqueta${r.brand ? ' · ' + esc(r.brand) : ''}. Revísalos antes de guardar.</p>
+          <button class="btn" id="apSave" style="width:100%">Guardar producto</button></div>`;
+        q('#apSave').addEventListener('click', () => {
+          const v = id => Number(q(id).value) || 0;
+          const f = { id: code ? 'off_' + code : 'c_' + uid(), name: q('#apName').value.trim() || 'Producto', brand: r.brand, cat: code ? 'Escaneados' : 'Mis alimentos', kcal: v('#ap_kcal'), p: v('#ap_p'), c: v('#ap_c'), g: v('#ap_g') };
+          if (v('#apPor') > 0) f.por = v('#apPor');
+          if (!(f.kcal >= 0)) return toast('Revisa las calorías');
+          state.customFoods = state.customFoods.filter(x => x.id !== f.id);
+          state.customFoods.push(f); save();
+          closeModal(); ui.selFood = f.id; ui.foodQuery = ''; ui.foodCat = 'Todas'; view = 'comidas'; render();
+          toast('Producto guardado' + (code ? ': la próxima vez que lo escanees aparece altiro' : ''));
+        });
+      } catch (e) { q('#apOut').innerHTML = aiFail(e); }
+      finally { q('#apGo').disabled = !imgs.length; }
+    };
+    q('#apGo').addEventListener('click', run);
+  });
 }
