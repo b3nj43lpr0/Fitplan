@@ -786,3 +786,59 @@ test('IA gym: ejercicios sin series pasan al registro del gym para completar kg 
   const w = (await state(page)).workouts.at(-1);
   expect(w.ex).toEqual([{ id: 'incline-db-curl', sets: [{ kg: 10, reps: 12 }] }]); // solo las series con repeticiones
 });
+
+test('Foto del plato: base de alimentos, valores por 100 g, porción, rango y corrección', async ({ page }) => {
+  await fakeAI(page);
+  await page.evaluate(() => {
+    window.FitSync.ask = async o => {
+      window.__asked.push(o);
+      const fixed = /CORRECCIÓN/.test(o.message);
+      return JSON.stringify({
+        dish: 'Pollo con arroz', confidence: 'media', meal: null, note: 'Supuse arroz blanco.',
+        items: [
+          { name: 'Pechuga de pollo a la plancha', id: 'pollo', grams: fixed ? 300 : 150, kcal100: 999 }, // de la base: se usan sus valores, no los de la IA
+          { name: 'Arroz blanco al vapor', id: null, grams: 200, kcal100: 130, p100: 2.7, c100: 28, g100: 0.3 },
+          { name: 'Aceite de cocción', id: 'no-existe', grams: 10, kcal100: 884, p100: 0, c100: 0, g100: 100 },
+        ],
+      });
+    };
+  });
+  await page.click('[data-view=comidas]');
+  await page.click('#aiPhoto');
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+  await page.setInputFiles('#afPhoto', { name: 'plato.png', mimeType: 'image/png', buffer: png });
+  await expect(page.locator('.ai-item')).toHaveCount(3);
+  // La foto se analiza con más detalle y la IA recibe la base de alimentos y el método
+  const req = await page.evaluate(() => window.__asked.at(-1));
+  expect(req.think).toBe('MEDIUM');
+  expect(req.system).toContain('pollo: Pechuga de pollo asada');
+  expect(req.system).toContain('Aceite de cocción');
+  // Pollo 150 g de la base (165 kcal/100 g) = 248; arroz 200 g × 1,3 = 260; aceite 10 g = 88 → 596
+  const total = async () => Number(await page.locator('.ai-total-row div').first().locator('b').textContent());
+  expect(await total()).toBe(596);
+  await expect(page.locator('.ai-item').first()).toContainText('valores de la base');
+  await expect(page.locator('.ai-total')).toContainText('Confianza media');
+  await expect(page.locator('.ai-total')).toContainText('entre 477 y 715 kcal');
+  await expect(page.locator('.ai-total-row .prot b')).toHaveText('52 g'); // 46,5 + 5,4 de proteína
+  // Porción ¾ escala todo
+  await page.click('[data-ai-k="0.75"]');
+  expect(await total()).toBe(447);
+  await page.click('[data-ai-k="1"]');
+  // Corrección: se vuelve a preguntar con la estimación anterior y lo que dijo la persona
+  await page.click('.ai-fix summary');
+  await page.fill('#aiFixTxt', 'eran 2 pechugas');
+  await page.click('#aiFixGo');
+  await expect.poll(total).toBe(843);
+  const fix = await page.evaluate(() => window.__asked.at(-1).message);
+  expect(fix).toContain('CORRECCIÓN DE LA PERSONA (respétala): eran 2 pechugas');
+  expect(fix).toContain('"name":"Pechuga de pollo asada (sin piel)","grams":150');
+  // Sin comida indicada, se anota según la hora
+  const guess = await page.evaluate(() => guessMeal());
+  await expect(page.locator(`[data-ai-meal=${guess}]`)).toHaveClass(/on/);
+  const n0 = (await today(page)).foods.length;
+  await page.click('#aiSave');
+  const fs = (await today(page)).foods.slice(n0);
+  expect(fs.map(f => [f.name, f.grams, f.meal])).toEqual([['Pechuga de pollo asada (sin piel)', 300, guess], ['Arroz blanco al vapor', 200, guess], ['Aceite de cocción', 10, guess]]);
+  expect(fs[0].foodId).toBe('pollo');
+  await expect(page.locator('#toast')).toContainText('843 kcal');
+});
