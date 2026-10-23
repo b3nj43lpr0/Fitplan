@@ -218,6 +218,19 @@ bind.comidas = () => {
       const file = e.target.files[0];
       e.target.value = '';
       if (!file) return;
+      // Con sesión iniciada, la IA lee la etiqueta (más exacto); sin ella, el lector dentro del teléfono
+      if (aiReady()) {
+        st('🤖 Leyendo la etiqueta con IA…');
+        try {
+          const r = await aiLabel([await fileToImage(file)]);
+          if (!r.ok) { st('No pude leer la tabla: ' + (r.note || 'saca la foto más de cerca, recta y con buena luz.')); return; }
+          const set = (id, v) => { if (v !== null && v !== undefined && v !== '') m.querySelector(id).value = v; };
+          set('#cfKcal', r.kcal); set('#cfP', r.p); set('#cfC', r.c); set('#cfG', r.g); set('#cfPor', r.por);
+          if (r.name && !m.querySelector('#cfName').value) set('#cfName', r.name + (r.brand ? ' ' + r.brand : ''));
+          st('✓ Leí la etiqueta con IA (valores por 100 g). Revísalos antes de guardar.');
+          return;
+        } catch (err) { st('La IA no respondió; uso el lector del teléfono…'); }
+      }
       st('Preparando el lector… (la primera vez descarga ≈6 MB)');
       try {
         const text = await readLabel(file, st);
@@ -335,7 +348,8 @@ function lookupBarcode(code, m) {
       const n = p && p.nutriments;
       const kcal = n && (n['energy-kcal_100g'] ?? (n['energy_100g'] ? n['energy_100g'] / 4.184 : undefined));
       if (!p || kcal === undefined) {
-        box.innerHTML = `<div class="result-box">No encontré el producto ${esc(code)} en Open Food Facts. Puedes crearlo con los datos de la etiqueta en "Crear alimento propio".</div>`;
+        box.innerHTML = `<div class="result-box">No encontré el producto ${esc(code)} en Open Food Facts.<button class="btn" id="offAI" style="width:100%;margin-top:10px">📸 Crearlo con fotos del envase (IA)</button></div>`;
+        box.querySelector('#offAI').addEventListener('click', () => openAIProduct(code));
         return;
       }
       const f = {

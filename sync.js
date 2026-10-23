@@ -289,7 +289,9 @@
     // Pensar poco (LOW) responde mucho más rápido; si un modelo no acepta la opción, se reintenta sin ella
     const base = { maxOutputTokens: maxTokens, ...(json ? { responseMimeType: 'application/json' } : {}) };
     const configs = [{ thinkingConfig: { thinkingLevel: think }, ...base }, base];
-    const msg = image ? [message, { inlineData: { data: image.data, mimeType: image.mimeType } }] : message;
+    // image puede ser una foto o varias (por ejemplo, el frente y la etiqueta de un producto)
+    const imgs = image ? [].concat(image) : [];
+    const msg = imgs.length ? [message, ...imgs.map(i => ({ inlineData: { data: i.data, mimeType: i.mimeType } }))] : message;
     let lastErr = null;
     for (const model of AI_MODELS) {
       for (const generationConfig of configs) {

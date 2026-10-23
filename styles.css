@@ -816,3 +816,5 @@ button.avatar { border: 0; cursor: pointer; font-family: inherit; }
 .tip-card { display: flex; gap: 10px; align-items: flex-start; background: var(--card); border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); border-radius: 18px; padding: 12px 12px 12px 14px; margin: 0 0 14px; font-size: 14.5px; line-height: 1.45; }
 .tip-ico { font-size: 22px; line-height: 1; }
 .tip-txt { flex: 1; }
+.ap-thumbs { display: flex; gap: 8px; margin: 10px 0; }
+.ap-thumbs img { width: 72px; height: 72px; object-fit: cover; border-radius: 12px; }

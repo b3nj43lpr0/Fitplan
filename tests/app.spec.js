@@ -936,3 +936,60 @@ test('Consejo del día en Hoy: calculado sin IA y con IA una vez por momento del
   await expect.poll(() => page.evaluate(() => window.__asked.length)).toBe(n + 1);
   expect(await page.evaluate(() => window.__asked.at(-1).message)).toContain('Que sea distinto');
 });
+
+test('Etiqueta y productos con IA: crear alimento, producto sin código y foto que aprende', async ({ page }) => {
+  await fakeAI(page);
+  await page.evaluate(() => {
+    window.FitSync.ask = async o => {
+      window.__asked.push(o);
+      if (/envase/.test(o.message)) return JSON.stringify({ name: 'Galletas de avena', brand: 'Marca X', per100: { kcal: 452, p: 7.1, c: 64.3, g: 18.2 }, portion_g: 30, ok: true });
+      return JSON.stringify({ dish: 'Arroz con pollo', confidence: 'alta', items: [{ name: 'Arroz blanco', id: null, grams: 200, kcal100: 130, p100: 2.7, c100: 28, g100: 0.3 }, { name: 'Pollo', id: 'pollo', grams: 150 }] });
+    };
+  });
+  const png = { name: 'f.png', mimeType: 'image/png', buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64') };
+  // Crear alimento: la etiqueta se lee con IA (no con el lector del teléfono)
+  await page.click('[data-view=comidas]');
+  await page.click('#newFood');
+  await page.setInputFiles('#cfPhoto', png);
+  await expect(page.locator('#cfStatus')).toContainText('Leí la etiqueta con IA');
+  await expect(page.locator('#cfKcal')).toHaveValue('452');
+  await expect(page.locator('#cfP')).toHaveValue('7.1');
+  await expect(page.locator('#cfPor')).toHaveValue('30');
+  await expect(page.locator('#cfName')).toHaveValue('Galletas de avena Marca X');
+  expect(await page.evaluate(() => window.__asked.at(-1).system)).toContain('columna de 100 g');
+  await page.click('.modal-x');
+  // Producto que no está en Open Food Facts: se crea con fotos y queda con su código
+  await page.route('https://world.openfoodfacts.org/**', r => r.fulfill({ json: { status: 0 } }));
+  await page.click('#scanBtn');
+  await page.fill('#scanCode', '7801234567890');
+  await page.click('#scanSearch');
+  await page.click('#offAI');
+  await page.setInputFiles('#apPhotos', [png, png]);
+  await expect(page.locator('#apName')).toHaveValue('Galletas de avena');
+  expect(await page.evaluate(() => [].concat(window.__asked.at(-1).image).length)).toBe(2);
+  await page.click('#apSave');
+  const f = (await state(page)).customFoods.find(x => x.id === 'off_7801234567890');
+  expect(f).toMatchObject({ name: 'Galletas de avena', kcal: 452, p: 7.1, por: 30, cat: 'Escaneados' });
+  await page.click('.modal-x');
+  // La foto del plato aprende: la IA recibe tus porciones habituales y tus combos
+  await page.evaluate(() => {
+    for (let i = 1; i <= 3; i++) state.days[shiftKey(todayKey(), -i)].foods.push({ id: 'r' + i, name: 'Arroz blanco', grams: 180, meal: 'almuerzo', kcal: 234, p: 5, c: 50, g: 1 });
+    state.combos.push({ id: 'c1', name: 'Mi desayuno', items: [{ name: 'Huevo', grams: 100, kcal: 155, p: 13, c: 1, g: 11 }] });
+    save();
+  });
+  await page.click('#aiPhoto');
+  await page.setInputFiles('#afPhoto', png);
+  await expect(page.locator('.ai-item')).toHaveCount(2);
+  const sys = await page.evaluate(() => window.__asked.at(-1).system);
+  expect(sys).toContain('PORCIONES HABITUALES');
+  expect(sys).toContain('Arroz blanco ~180 g (3 veces)');
+  expect(sys).toContain('Mi desayuno: Huevo 100 g');
+  // Antes y después: la foto de lo que sobró viaja junto a la del plato servido
+  await page.setInputFiles('#aiLeft', png);
+  await expect(page.locator('.ai-total')).toContainText('descontando lo que sobró');
+  const last = await page.evaluate(() => window.__asked.at(-1));
+  expect([].concat(last.image)).toHaveLength(2);
+  expect(last.message).toContain('lo que SOBRÓ');
+  expect(last.message).toContain('"name":"Arroz blanco","grams":200');
+  await expect(page.locator('#aiLeft')).toHaveCount(0); // ya se descontó
+});
