@@ -28,17 +28,28 @@ async function readWatchDay(k) {
   const s = parseKey(k), e = parseKey(shiftKey(k, 1));
   const now = new Date();
   const range = { startDate: s.toISOString(), endDate: (e > now ? now : e).toISOString() };
-  const sum = async t => {
+  const samples = async (t, rg = range) => { try { return (await HC.readSamples({ dataType: t, ...rg, limit: 5000, ascending: true })).samples || []; } catch (err) { return []; } };
+  // Pasos, distancia y calorías: la suma rápida de Health Connect, y si no trae nada (o el tipo no se puede sumar),
+  // se suman los registros uno por uno por cada fuente (reloj, teléfono…) y se toma la mayor, para no contar dos veces
+  const agg = async t => {
     try { const r = await HC.queryAggregated({ dataType: t, ...range, bucket: 'day', aggregation: 'sum' }); return r.samples.reduce((a, x) => a + (x.value || 0), 0); } catch (err) { return 0; }
   };
-  const samples = async (t, rg = range) => { try { return (await HC.readSamples({ dataType: t, ...rg, limit: 2000, ascending: true })).samples || []; } catch (err) { return []; } };
+  const total = async t => {
+    const [a, list] = await Promise.all([agg(t), samples(t)]);
+    const by = {};
+    for (const x of list) { const k = x.sourceId || x.sourceName || '?'; by[k] = (by[k] || 0) + (x.value || 0); }
+    const last = list.reduce((m, x) => (x.endDate > m ? x.endDate : m), '');
+    return { v: Math.max(a, ...Object.values(by), 0), last, n: list.length };
+  };
   // El sueño de "hoy" es la noche que terminó esta mañana: desde las 18:00 de ayer hasta las 18:00 de hoy
   const sleepRange = { startDate: new Date(s.getTime() - 6 * 3600e3).toISOString(), endDate: new Date(Math.min(s.getTime() + 18 * 3600e3, now.getTime())).toISOString() };
-  const [steps, meters, active, total, hr, rhr, spo2, wts, sleep, wk] = await Promise.all([
-    sum('steps'), sum('distance'), sum('calories'), sum('totalCalories'),
+  const [st, dist, act, tot, hr, rhr, spo2, wts, sleep, wk] = await Promise.all([
+    total('steps'), total('distance'), total('calories'), total('totalCalories'),
     samples('heartRate'), samples('restingHeartRate'), samples('oxygenSaturation'), samples('weight'), samples('sleep', sleepRange),
     HC.queryWorkouts({ ...range, limit: 50, ascending: true }).then(r => r.workouts || []).catch(() => []),
   ]);
+  const steps = st.v, meters = dist.v, active = act.v;
+  const lastData = [st.last, act.last, tot.last, ...hr.map(x => x.endDate)].reduce((m, x) => (x && x > m ? x : m), '');
   const vals = a => a.map(x => x.value).filter(v => v > 0);
   const avg = a => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0);
   const h = vals(hr), ox = vals(spo2);
@@ -52,7 +63,7 @@ async function readWatchDay(k) {
     } else if (x.sleepState !== 'awake' && x.sleepState !== 'inBed') sl.min += x.value || 0;
   }
   return {
-    steps: Math.round(steps), km: Math.round(meters / 10) / 100, active: Math.round(active), total: Math.round(total),
+    steps: Math.round(steps), km: Math.round(meters / 10) / 100, active: Math.round(active), total: Math.round(tot.v), last: lastData || null,
     hr: h.length ? { avg: Math.round(avg(h)), min: Math.min(...h), max: Math.max(...h) } : null,
     rhr: vals(rhr).length ? Math.round(vals(rhr).pop()) : null,
     spo2: ox.length ? Math.round(avg(ox)) : null,
@@ -150,7 +161,8 @@ function watchCard() {
       ${w.spo2 ? m(w.spo2 + '%', 'oxígeno (SpO2)', '🩸') : ''}
       ${w.n ? m(w.n, w.n === 1 ? 'entrenamiento' : 'entrenamientos', '🏃') : ''}
     </div>
-    <p class="muted small" style="margin:8px 0 0">${ago < 1 ? 'Recién actualizado' : ago < 60 ? `Hace ${ago} min` : `Hace ${Math.round(ago / 60)} h`} · Mi Fitness → Health Connect${w.n && watchCfg().workouts ? ' · los entrenamientos se suman en Ejercicio' : ''}</p>
+    <p class="muted small" style="margin:8px 0 0">${ago < 1 ? 'Leído recién' : ago < 60 ? `Leído hace ${ago} min` : `Leído hace ${Math.round(ago / 60)} h`}${w.last ? ` · último dato del reloj: ${new Date(w.last).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}` : ''}${w.n && watchCfg().workouts ? ' · los entrenamientos se suman en Ejercicio' : ''}</p>
+    ${NATIVE && currentDate === todayKey() && (!w.last || Date.now() - new Date(w.last) > 90 * 60e3) ? '<p class="small watch-hint">¿Faltan pasos recientes? Abre <b>Mi Fitness</b>, deja que sincronice el reloj y vuelve aquí: Mi Fitness pasa los datos a Health Connect solo cuando sincroniza.</p>' : ''}
   </div>`;
 }
 
@@ -171,9 +183,37 @@ function watchPerfilCard() {
     <div class="btn-row">
       ${cfg.on ? '<button class="btn sm" data-watch="sync7">↻ Leer últimos 7 días</button>' : '<button class="btn sm" data-watch="connect">Conectar reloj</button>'}
       <button class="btn ghost sm" data-watch="settings">Permisos de Health Connect</button>
+      ${cfg.on ? '<button class="btn ghost sm" data-watch="diag">🔎 ¿Qué llega del reloj?</button>' : ''}
       ${cfg.on ? '<button class="btn ghost sm" data-watch="off">Desconectar</button>' : ''}
     </div>
   </div>`;
+}
+
+// ---------- Diagnóstico: qué está llegando a Health Connect hoy ----------
+async function watchDiag() {
+  if (!HC) return;
+  openModal('<h2>⌚ Qué llega del reloj</h2><p class="muted">Revisando Health Connect…</p>');
+  const s = parseKey(todayKey());
+  const range = { startDate: s.toISOString(), endDate: new Date().toISOString() };
+  const names = { steps: 'Pasos', distance: 'Distancia', calories: 'Calorías activas', totalCalories: 'Calorías totales', heartRate: 'Pulso', restingHeartRate: 'Pulso en reposo', oxygenSaturation: 'Oxígeno', sleep: 'Sueño', weight: 'Peso' };
+  let denied = [];
+  try { const a = await HC.checkAuthorization({ read: WATCH_READ, write: [] }); denied = a.readDenied || []; } catch (e) { /* ignorar */ }
+  const rows = [];
+  for (const t of Object.keys(names)) {
+    let list = [], err = '';
+    try { list = (await HC.readSamples({ dataType: t, ...range, limit: 5000 })).samples || []; } catch (e) { err = e.message || 'error'; }
+    const srcs = [...new Set(list.map(x => x.sourceName || x.sourceId).filter(Boolean))];
+    const sum = list.reduce((a, x) => a + (x.value || 0), 0);
+    const last = list.reduce((m, x) => (x.endDate > m ? x.endDate : m), '');
+    rows.push(`<div class="item"><div style="flex:1"><b>${names[t]}</b><div class="muted small">${denied.includes(t) ? '🚫 sin permiso' : err ? 'error: ' + esc(err) : list.length ? `${list.length} registros · ${['steps', 'distance', 'calories', 'totalCalories'].includes(t) ? 'suma ' + Math.round(sum) + ' · ' : ''}último ${last ? new Date(last).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' }) : '—'}${srcs.length ? ' · de ' + esc(srcs.join(', ')) : ''}` : 'sin datos hoy'}</div></div></div>`);
+  }
+  let wk = 0;
+  try { wk = ((await HC.queryWorkouts({ ...range, limit: 50 })).workouts || []).length; } catch (e) { /* ignorar */ }
+  const m = $('.modal');
+  if (m) m.innerHTML = `<h2>⌚ Qué llega del reloj (hoy)</h2>
+    ${rows.join('')}<div class="item"><div><b>Entrenamientos</b><div class="muted small">${denied.includes('workouts') ? '🚫 sin permiso' : wk ? wk + ' hoy' : 'ninguno hoy'}</div></div></div>
+    <p class="muted small">Si algo dice "sin datos hoy", revisa en Mi Fitness → Perfil → Health Connect que ese dato esté activado. Si dice "sin permiso", toca abajo y dale permiso a FitPlan.</p>
+    <div class="btn-row"><button class="btn sm" data-watch="settings">Permisos de Health Connect</button><button class="btn ghost sm" onclick="closeModal()">Cerrar</button></div>`;
 }
 
 // Botones del reloj (en cualquier pantalla)
@@ -184,6 +224,7 @@ document.addEventListener('click', e => {
     if (a === 'connect') connectWatch();
     if (a === 'sync') syncWatch();
     if (a === 'sync7') syncWatch({ days: 7 });
+    if (a === 'diag') watchDiag();
     if (a === 'settings' && HC) HC.openHealthConnectSettings().catch(() => toast('No pude abrir Health Connect'));
     if (a === 'off') { setWatchCfg({ on: false }); render(); toast('Reloj desconectado (lo ya leído se mantiene)'); }
     return;
