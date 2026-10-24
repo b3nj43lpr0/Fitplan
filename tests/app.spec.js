@@ -1191,8 +1191,8 @@ test('PC: Registrar y Buscar en la barra lateral, calendario en una fila y Hoy e
 });
 
 // Simula la app Android: Capacitor con el plugin Health (Health Connect) y datos de un reloj
-async function fakeAndroid(page) {
-  await page.addInitScript(() => {
+async function fakeAndroid(page, opts = {}) {
+  await page.addInitScript(o => {
     const now = new Date();
     const at = (h, m = 0) => { const d = new Date(now); d.setHours(h, m, 0, 0); return d.toISOString(); };
     window.__hc = { asked: null, reads: 0 };
@@ -1203,21 +1203,31 @@ async function fakeAndroid(page) {
       weight: [{ value: 79.6 }],
       sleep: [{ value: 450, stages: [{ stage: 'light', durationMinutes: 240 }, { stage: 'deep', durationMinutes: 90 }, { stage: 'rem', durationMinutes: 80 }, { stage: 'awake', durationMinutes: 20 }] }],
     };
-    const sums = { steps: 8432, distance: 6100, calories: 512, totalCalories: 2380 };
+    const sums = { steps: 8432, distance: 6100, calories: 512 };
+    // Registros sueltos (como los escribe Mi Fitness): el reloj y, aparte, el teléfono con menos pasos
+    if (o.records) {
+      samples.steps = [{ value: 5000, sourceId: 'com.mi.health' }, { value: 3432, sourceId: 'com.mi.health' }, { value: 1200, sourceId: 'android' }];
+      samples.totalCalories = [{ value: 1500, sourceId: 'com.mi.health' }, { value: 880, sourceId: 'com.mi.health' }];
+    }
     window.Capacitor = {
       isNativePlatform: () => true,
       Plugins: {
         Health: {
           isAvailable: async () => ({ available: true }),
           requestAuthorization: async o => { window.__hc.asked = o; return { readAuthorized: o.read, readDenied: [] }; },
-          queryAggregated: async o => { window.__hc.reads++; return { samples: [{ value: sums[o.dataType] || 0 }] }; },
+          queryAggregated: async q => {
+            window.__hc.reads++;
+            if (q.dataType === 'totalCalories') throw new Error('Unsupported data type for aggregation'); // como el plugin real
+            return { samples: o.records ? [] : [{ value: sums[q.dataType] || 0 }] };
+          },
+          checkAuthorization: async q => ({ readAuthorized: q.read, readDenied: [] }),
           readSamples: async o => ({ samples: (samples[o.dataType] || []).map(s => ({ ...s, startDate: at(7), endDate: at(8) })) }),
           queryWorkouts: async () => ({ workouts: [{ workoutType: 'running', duration: 1800, totalEnergyBurned: 310, totalDistance: 5200, startDate: at(7), endDate: at(7, 30), platformId: 'w1' }] }),
           openHealthConnectSettings: async () => {},
         },
       },
     };
-  });
+  }, opts);
   await page.reload();
 }
 
@@ -1252,4 +1262,19 @@ test('Reloj en el PC/web: sin app Android no muestra la tarjeta vacía y Perfil 
   await expect(page.locator('.watch-card')).toHaveCount(0);
   await page.click('#avatarBtn');
   await expect(page.locator('a[href*="releases/download/android/FitPlan.apk"]')).toBeVisible();
+});
+
+test('Reloj: si Health Connect no suma rápido, cuenta los registros sin duplicar fuentes y usa las calorías totales', async ({ page }) => {
+  await fakeAndroid(page, { records: true });
+  await page.click('.watch-card [data-watch=connect]');
+  await expect(page.locator('.watch-card')).toContainText('8432');
+  await expect(page.locator('.watch-card')).toContainText('kcal totales');
+  const w = (await today(page)).watch;
+  expect(w.steps).toBe(8432); // del reloj; no suma los 1200 del teléfono encima
+  expect(w.total).toBe(2380);
+  expect(w.last).toBeTruthy();
+  await page.click('#avatarBtn');
+  await page.click('[data-watch=diag]');
+  await expect(page.locator('.modal')).toContainText('suma 9632');
+  await expect(page.locator('.modal')).toContainText('Calorías totales');
 });
