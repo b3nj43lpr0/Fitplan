@@ -1225,6 +1225,7 @@ async function fakeAndroid(page, opts = {}) {
           queryWorkouts: async () => ({ workouts: [{ workoutType: 'running', duration: 1800, totalEnergyBurned: 310, totalDistance: 5200, startDate: at(7), endDate: at(7, 30), platformId: 'w1' }] }),
           openHealthConnectSettings: async () => {},
         },
+        FitPlanWidget: { update: async d => { window.__widget = d; } },
       },
     };
   }, opts);
@@ -1255,7 +1256,7 @@ test('Reloj (app Android): conectar, ver los datos en Hoy, importar entrenamient
   expect((await today(page)).exercises.some(e => e.id === 'hc-w1')).toBe(false);
   // Perfil: opciones del reloj
   await page.click('#avatarBtn');
-  await expect(page.locator('[data-watch=sync7]')).toBeVisible();
+  await expect(page.locator('[data-watch=sync30]')).toBeVisible();
 });
 
 test('Reloj en el PC/web: sin app Android no muestra la tarjeta vacía y Perfil ofrece descargar la APK', async ({ page }) => {
@@ -1277,4 +1278,77 @@ test('Reloj: si Health Connect no suma rápido, cuenta los registros sin duplica
   await page.click('[data-watch=diag]');
   await expect(page.locator('.modal')).toContainText('suma 9632');
   await expect(page.locator('.modal')).toContainText('Calorías totales');
+});
+
+// Datos de reloj de 14 días en el estado (como si la app Android ya los hubiera leído)
+async function seedWatch(page) {
+  await page.evaluate(() => {
+    const s = window.__fitplan.get();
+    const z = n => String(n).padStart(2, '0');
+    for (let i = 0; i < 14; i++) {
+      const d = new Date(); d.setDate(d.getDate() - i);
+      const k = `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}`;
+      s.days[k] = s.days[k] || { foods: [], exercises: [], water: 0 };
+      s.days[k].watch = { steps: 6000 + i * 300, km: 4.2, active: 350, total: 2300, rhr: i < 7 ? 64 : 57, hr: { avg: 80, min: 55, max: 150 }, sleep: { min: i === 0 ? 320 : 400, deep: 70, rem: 80, light: 250, awake: 20 }, spo2: 97, n: 0, imp: [], at: Date.now() };
+    }
+    window.__fitplan.replace(s);
+  });
+}
+
+test('Progreso → Reloj: promedios y gráficos de pasos, sueño, pulso y calorías (7 y 30 días)', async ({ page }) => {
+  await seedWatch(page);
+  await page.click('[data-view=progreso]');
+  await page.click('[data-tab-prog=reloj]');
+  await expect(page.locator('.stat .value').first()).toContainText('6');
+  await expect(page.locator('.wchart')).toHaveCount(4);
+  await expect(page.locator('main')).toContainText('+7 lpm vs. semana anterior');
+  await page.click('[data-watch-range="30"]');
+  await expect(page.locator('.wchart').first().locator('rect')).toHaveCount(30);
+});
+
+test('Coach básico usa el reloj: sueño corto, pocos pasos y pulso en reposo que sube', async ({ page }) => {
+  await seedWatch(page);
+  const tips = await page.evaluate(() => basicCoach('reloj').join('\n'));
+  expect(tips).toContain('Anoche dormiste 5 h 20');
+  expect(tips).toContain('Pasos');
+  expect(tips).toContain('pulso en reposo subió 7');
+  const ctx = await page.evaluate(() => coachContext());
+  expect(ctx).toContain('Reloj (Mi Fitness → Health Connect)');
+  await page.click('[data-view=coach]');
+  await expect(page.locator('[data-q=reloj]')).toBeVisible();
+});
+
+test('Widget Android: recibe kcal restantes, proteína, pasos y agua al guardar', async ({ page }) => {
+  await fakeAndroid(page);
+  await page.click('.watch-card [data-watch=connect]');
+  await page.click('[data-water-step="1"]');
+  await page.waitForFunction(() => window.__widget && window.__widget.steps === 8432);
+  const w = await page.evaluate(() => window.__widget);
+  expect(w.goal).toBeGreaterThan(1000);
+  expect(w.left).toBe(w.goal - w.eaten);
+  expect(w.water).toBeGreaterThan(0);
+});
+
+test('Buscar productos de supermercado por nombre (Open Food Facts) y guardarlos', async ({ page }) => {
+  await page.route('https://world.openfoodfacts.org/cgi/search.pl**', r => r.fulfill({ json: { products: [
+    { code: '7802900001', product_name: 'Yogurt Protein Frutilla', brands: 'Soprole', nutriments: { 'energy-kcal_100g': 62, proteins_100g: 8, carbohydrates_100g: 6.5, fat_100g: 0.4 }, serving_quantity: 155 },
+    { code: '7802900002', product_name: 'Yogurt Protein Vainilla', brands: 'Soprole', nutriments: { 'energy-kcal_100g': 60, proteins_100g: 8, carbohydrates_100g: 6, fat_100g: 0.4 } },
+    { code: '7802900003', product_name: 'Sin datos', brands: 'X', nutriments: {} },
+    { code: '7802900004', product_name: 'Yogurt Protein Mango', brands: 'Soprole', nutriments: { 'energy-kcal_100g': 61, proteins_100g: 8, carbohydrates_100g: 6.2, fat_100g: 0.4 } },
+  ] } }));
+  await page.click('[data-view=comidas]');
+  await page.fill('#foodSearch', 'yogurt protein');
+  await page.click('#offSearch');
+  await expect(page.locator('[data-off]')).toHaveCount(3);
+  await page.click('[data-off="0"]');
+  const f = (await state(page)).customFoods.find(x => x.id === 'off_7802900001');
+  expect(f).toMatchObject({ name: 'Yogurt Protein Frutilla', kcal: 62, p: 8, por: 155 });
+});
+
+test('Base de alimentos: más de 600, sin ids repetidos y con macros coherentes', async ({ page }) => {
+  const r = await page.evaluate(() => ({ n: FOODS.length, ids: new Set(FOODS.map(f => f.id)).size, bad: FOODS.filter(f => !(f.kcal >= 0 && f.p >= 0 && f.c >= 0 && f.g >= 0) || f.p + f.c + f.g > 101).map(f => f.name) }));
+  expect(r.n).toBeGreaterThan(600);
+  expect(r.ids).toBe(r.n);
+  expect(r.bad).toEqual([]);
+  expect(await page.evaluate(() => FOODS.some(f => f.name === 'Chacarero') && FOODS.some(f => f.name.startsWith('Big Mac')))).toBe(true);
 });
