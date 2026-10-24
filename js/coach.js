@@ -33,6 +33,7 @@ function coachContext() {
     prs.length ? `Fuerza: ${prs.join('; ')}.` : '',
     `Racha de registro: ${streak()} días. Logros: ${state.badges.length} de ${BADGES.length}.`,
     state.challenges.filter(c => !c.closed).length ? `Desafíos activos: ${state.challenges.filter(c => !c.closed).map(c => { const x = challengeProgress(c); return `${x.def.name} (${x.done} de ${x.elapsed} días)`; }).join('; ')}.` : '',
+    ...watchCoachLines(),
     state.fasting && state.fasting.on ? `Ayuno ${state.fasting.plan}:${24 - state.fasting.plan}, ${state.fasting.start ? 'ahora en ayuno' : 'ventana de comida abierta'}.` : '',
   ];
   return lines.filter(Boolean).join('\n');
@@ -76,6 +77,8 @@ function basicCoach(topic = 'semana') {
   else improve.push(`Entrenaste ${train} días${state.routine ? ` de los ${state.routine.dias} de tu rutina` : ''}. Agenda los entrenamientos como si fueran una cita.`);
   if (streak() >= 7) good.push(`Llevas una racha de ${streak()} días seguidos registrando.`);
   if (tr !== null && p.objetivo === 'perder' && tr < 0 && tr >= -0.01 * currentWeight()) good.push(`Estás bajando ${r1(-tr)} kg por semana, un ritmo sano.`);
+  const wt = watchCoachTips();
+  good.push(...wt.good); improve.push(...wt.improve);
   const meta = goalProjection(tg);
   const goalLine = !p.meta ? 'Aún no tienes un peso meta: ponlo en Progreso → Déficit para ver cuándo llegarías.'
     : meta && meta.reached ? '¡Estás en tu peso meta! Considera pasar tu objetivo a mantener.'
@@ -83,6 +86,7 @@ function basicCoach(topic = 'semana') {
         : `Con tu balance actual no te estás acercando a ${p.meta} kg.`;
   if (topic === 'bien') return good.length ? good : ['Todavía no tengo suficientes datos de esta semana. ¡Registra tus comidas y te cuento!'];
   if (topic === 'mejorar') return improve.length ? improve : ['¡Vas muy bien en todo! Mantén lo que estás haciendo.'];
+  if (topic === 'reloj') { const w = watchCoachTips(); return w.good.length || w.improve.length ? [...w.good.map(x => '✅ ' + x), ...w.improve.map(x => '💡 ' + x)] : ['Aún no tengo datos de tu reloj. Conéctalo desde la app Android (Hoy → ⌚ Tu reloj).']; }
   if (topic === 'meta') return [goalLine, ...(st.avg !== null ? [`Balance de 7 días: ${st.avg >= 0 ? 'déficit' : 'superávit'} de ${r0(Math.abs(st.avg))} kcal al día.`] : [])];
   return [...good.slice(0, 3).map(x => '✅ ' + x), ...improve.slice(0, 2).map(x => '💡 ' + x), '🏁 ' + goalLine];
 }
@@ -95,6 +99,7 @@ const QUICK_Q = [
   ['meta', '¿Cómo voy con mi meta?'],
   ['cena', '¿Qué ceno con lo que me queda hoy?'],
   ['estanco', '¿Por qué no estoy bajando de peso?'],
+  ['reloj', '¿Cómo voy con sueño y pasos?'],
 ];
 function coachLog() { try { return JSON.parse(localStorage.getItem(COACH_KEY)) || []; } catch (e) { return []; } }
 function storeCoach(l) { try { localStorage.setItem(COACH_KEY, JSON.stringify(l.slice(-30))); } catch (e) { /* ignorar */ } }
@@ -160,7 +165,7 @@ bind.coach = () => {
           onChunk: t => { tmp.classList.remove('typing', 'thinking'); tmp.innerHTML = mdLite(t); box.scrollTop = box.scrollHeight; },
         });
       } catch (e) {
-        const fallback = basicCoach(topic && ['bien', 'mejorar', 'meta'].includes(topic) ? topic : 'semana');
+        const fallback = basicCoach(topic && ['bien', 'mejorar', 'meta', 'reloj'].includes(topic) ? topic : 'semana');
         // El detalle técnico ayuda a saber qué falta configurar (se puede copiar y enviar)
         const detail = e && e.code !== 'auth' && e.code !== 'offline' ? `\n\n_Detalle técnico: ${String(e.message || e).slice(0, 220)}_` : '';
         console.warn('Coach IA:', e);

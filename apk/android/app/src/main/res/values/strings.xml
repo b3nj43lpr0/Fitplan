@@ -6,4 +6,5 @@
     <string name="custom_url_scheme">cl.fitplan.app</string>
     <!-- Health Connect muestra esta página cuando tocas "Política de privacidad" al dar permisos -->
     <string name="health_connect_privacy_policy_url">https://b3nj43lpr0.github.io/Fitplan/privacidad.html</string>
+    <string name="widget_description">Tus kcal restantes, proteína, pasos y agua de hoy</string>
 </resources>

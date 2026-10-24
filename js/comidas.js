@@ -73,7 +73,8 @@ function foodListHtml() {
       <div class="info"><div class="name">${isFav(f.id) ? '<span class="star-on">★</span> ' : ''}${esc(f.name)}</div><div class="muted small">${f.por ? `porción ${f.por} g · ${r0(f.kcal * f.por / 100)} kcal` : `${r0(f.kcal)} kcal por 100 g`}</div></div>
       <button class="quick-add" data-quick="${f.id}" aria-label="Agregar ${f.por || 100} g a ${mealName}" title="Agregar ${f.por || 100} g a ${mealName}">＋</button>
     </div>`).join('') : `<div class="empty">${ui.foodCat === FAV ? 'Aún no tienes favoritas. Abre un alimento y toca ☆ para guardarlo aquí.' : ui.foodCat === RECENT ? 'Aquí aparecerá lo que registres.' : 'No encontré ese alimento. Escanéalo o créalo con los botones de arriba.'}</div>`)
-    + (list.length > shown.length ? `<button class="btn ghost" id="moreFoods" style="width:100%;margin-top:10px">Ver más (${list.length - shown.length})</button>` : '');
+    + (list.length > shown.length ? `<button class="btn ghost" id="moreFoods" style="width:100%;margin-top:10px">Ver más (${list.length - shown.length})</button>` : '')
+    + (q.length >= 3 && ui.foodCat !== FAV && ui.foodCat !== RECENT ? `<button class="btn ghost" id="offSearch" style="width:100%;margin-top:10px">🛒 Buscar «${esc(ui.foodQuery.trim())}» en productos de supermercado</button>` : '');
 }
 // Comidas tiene 4 secciones: registrar lo que comes, recetas, plan semanal y lista de compras
 const COM_TABS = [['registrar', 'Registrar'], ['recetas', 'Recetas'], ['plan', 'Plan'], ['compras', 'Compras']];
@@ -188,6 +189,8 @@ bind.comidas = () => {
       b.classList.add('pop'); setTimeout(() => b.classList.remove('pop'), 400);
     }));
     $$('[data-combo]').forEach(r => r.addEventListener('click', () => openCombo(r.dataset.combo)));
+    const offB = $('#offSearch');
+    if (offB) offB.addEventListener('click', () => openOffSearch(ui.foodQuery.trim()));
     const more = $('#moreFoods');
     if (more) more.addEventListener('click', () => { ui.foodLimit = (ui.foodLimit || 40) + 60; refresh(); });
   };
@@ -345,6 +348,49 @@ function openScanner() {
     }
   });
 }
+// ---------- Open Food Facts: productos de supermercado de todo el mundo ----------
+const OFF_FIELDS = 'code,product_name,product_name_es,brands,nutriments,serving_quantity,image_front_small_url';
+function offKcal(n) { return n ? (n['energy-kcal_100g'] ?? (n['energy_100g'] ? n['energy_100g'] / 4.184 : undefined)) : undefined; }
+function offFood(p, code) {
+  const n = p.nutriments || {};
+  const f = {
+    id: 'off_' + code, name: p.product_name_es || p.product_name || 'Producto ' + code, brand: p.brands || '', cat: 'Escaneados',
+    kcal: r0(offKcal(n)), p: r1(n.proteins_100g || 0), c: r1(n.carbohydrates_100g || 0), g: r1(n.fat_100g || 0),
+  };
+  if (n.fiber_100g) f.fib = r1(n.fiber_100g);
+  if (p.serving_quantity > 0) f.por = r0(Number(p.serving_quantity));
+  return f;
+}
+// Buscar por nombre: primero productos vendidos en Chile, si no hay, en todo el mundo
+async function offSearch(q) {
+  const url = c => `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(q)}&search_simple=1&action=process&json=1&page_size=30&fields=${OFF_FIELDS}${c ? '&tagtype_0=countries&tag_contains_0=contains&tag_0=chile' : ''}`;
+  const get = async c => ((await (await fetch(url(c))).json()).products || []).filter(p => p.code && offKcal(p.nutriments) !== undefined && (p.product_name_es || p.product_name));
+  const cl = await get(true);
+  return cl.length >= 3 ? { list: cl, chile: true } : { list: [...cl, ...(await get(false)).filter(p => !cl.some(x => x.code === p.code))], chile: false };
+}
+function openOffSearch(q) {
+  openModal(`<h2>🛒 Productos de supermercado</h2><p class="muted small" style="margin-top:-6px">Buscando «${esc(q)}» en Open Food Facts…</p><div id="offRes"><div class="typing msg model"><span></span><span></span><span></span></div></div>`, m => {
+    offSearch(q).then(({ list, chile }) => {
+      const box = m.querySelector('#offRes');
+      if (!box) return;
+      if (!list.length) {
+        box.innerHTML = `<div class="result-box">No encontré «${esc(q)}». Prueba con la marca (ej. "Soprole protein") o escanea el código del envase.<button class="btn" id="offScan" style="width:100%;margin-top:10px">Escanear código</button></div>`;
+        box.querySelector('#offScan').addEventListener('click', openScanner);
+        return;
+      }
+      m.querySelector('.muted.small').textContent = `${list.length} resultados${chile ? ' vendidos en Chile' : ''} · valores por 100 g · toca uno para agregarlo`;
+      box.innerHTML = `<div class="list">${list.map((p, i) => { const f = offFood(p, p.code); return `<div class="item" data-off="${i}" role="button" tabindex="0">
+        ${p.image_front_small_url ? `<img src="${esc(p.image_front_small_url)}" alt="" class="prod-img sm" loading="lazy">` : '<span class="fi">🛒</span>'}
+        <div class="info"><div class="name">${esc(f.name)}</div><div class="muted small">${esc(f.brand || '')}${f.brand ? ' · ' : ''}${f.kcal} kcal · P ${f.p} · C ${f.c} · G ${f.g}</div></div></div>`; }).join('')}</div>`;
+      box.querySelectorAll('[data-off]').forEach(r => r.addEventListener('click', () => {
+        const p = list[Number(r.dataset.off)], f = offFood(p, p.code);
+        if (!state.customFoods.some(x => x.id === f.id)) { state.customFoods.push(f); save(); }
+        closeModal(); ui.selFood = f.id; ui.foodQuery = ''; ui.foodCat = 'Todas'; render();
+        toast('Producto guardado en "Escaneados"');
+      }));
+    }).catch(() => { const box = m.querySelector('#offRes'); if (box) box.innerHTML = '<div class="result-box">No pude conectarme a Open Food Facts. Revisa tu conexión a internet.</div>'; });
+  });
+}
 function lookupBarcode(code, m) {
   const box = m.querySelector('#scanResult');
   const existing = state.customFoods.find(f => f.id === 'off_' + code);
@@ -355,17 +401,13 @@ function lookupBarcode(code, m) {
     .then(j => {
       const p = j && j.product;
       const n = p && p.nutriments;
-      const kcal = n && (n['energy-kcal_100g'] ?? (n['energy_100g'] ? n['energy_100g'] / 4.184 : undefined));
+      const kcal = offKcal(n);
       if (!p || kcal === undefined) {
-        box.innerHTML = `<div class="result-box">No encontré el producto ${esc(code)} en Open Food Facts.<button class="btn" id="offAI" style="width:100%;margin-top:10px">📸 Crearlo con fotos del envase (IA)</button></div>`;
+        box.innerHTML = `<div class="result-box">${p ? `Encontré «${esc(p.product_name_es || p.product_name || code)}», pero sin su información nutricional.` : `No encontré el producto ${esc(code)} en Open Food Facts.`}<button class="btn" id="offAI" style="width:100%;margin-top:10px">📸 Crearlo con fotos del envase (IA)</button></div>`;
         box.querySelector('#offAI').addEventListener('click', () => openAIProduct(code));
         return;
       }
-      const f = {
-        id: 'off_' + code, name: p.product_name_es || p.product_name || 'Producto ' + code, brand: p.brands || '', cat: 'Escaneados',
-        kcal: r0(kcal), p: r1(n.proteins_100g || 0), c: r1(n.carbohydrates_100g || 0), g: r1(n.fat_100g || 0),
-      };
-      if (p.serving_quantity > 0) f.por = r0(Number(p.serving_quantity));
+      const f = offFood(p, code);
       box.innerHTML = `<div class="result-box">
         <div class="row">${p.image_front_small_url ? `<img src="${esc(p.image_front_small_url)}" alt="" class="prod-img">` : ''}<div style="flex:1"><b>${esc(f.name)}</b><div class="muted small">${esc(f.brand)}</div></div></div>
         <div class="macro-pills" style="margin:8px 0">Por 100 g: <b>${f.kcal} kcal</b><span>P ${f.p} g</span><span>C ${f.c} g</span><span>G ${f.g} g</span></div>

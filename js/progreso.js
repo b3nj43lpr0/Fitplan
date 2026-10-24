@@ -334,11 +334,12 @@ function viewProgreso() {
   const trend = weightTrend();
   const expected = expectedRate(p);
   const change = ws.length ? ws[ws.length - 1].kg - ws[0].kg : 0;
-  const head = pageHead('Progreso') + tabs('prog', ui.progTab, [['peso', '<span class="te">⚖️ </span>Peso'], ['deficit', '<span class="te">🔥 </span>Déficit'], ['resumen', '<span class="te">📊 </span>Resumen'], ['fuerza', '<span class="te">💪 </span>Fuerza'], ['logros', '<span class="te">🏅 </span>Logros']]);
+  const head = pageHead('Progreso') + tabs('prog', ui.progTab, [['peso', '<span class="te">⚖️ </span>Peso'], ['deficit', '<span class="te">🔥 </span>Déficit'], ['resumen', '<span class="te">📊 </span>Resumen'], ['fuerza', '<span class="te">💪 </span>Fuerza'], ['logros', '<span class="te">🏅 </span>Logros'], ['reloj', '<span class="te">⌚ </span>Reloj']]);
   if (ui.progTab === 'deficit') return head + deficitTab();
   if (ui.progTab === 'resumen') return head + summaryCard() + `<div class="btn-row two"><button class="btn ghost" id="lastWeek">📅 Semana pasada</button><button class="btn" id="askCoach">💬 Pregúntale al coach</button></div>`;
   if (ui.progTab === 'fuerza') return head + strengthCard();
   if (ui.progTab === 'logros') return head + challengesSection() + badgesCard() + photosCard();
+  if (ui.progTab === 'reloj') return head + watchTab();
   return head + `
     <div class="grid g4 keep" style="margin-bottom:16px">
       <div class="stat"><div class="label">Peso actual</div><span class="tile-ico" aria-hidden="true">⚖️</span><div class="value">${r1(currentWeight())} <span class="unit">kg</span></div></div>
